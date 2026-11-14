@@ -1,6 +1,0 @@
-{
-  "name": "Forma Studio",
-  "description": "Unified PDF Studio (60 Tools) and Image Studio (49+ Tools & 310+ Filters) powered by client-side WebAssembly, Web Workers, WebGL, and Gemini AI.",
-  "requestFramePermissions": ["camera"],
-  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
-}
