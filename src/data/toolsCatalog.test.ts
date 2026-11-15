@@ -12,30 +12,30 @@ import {
   searchStudioTools,
 } from './toolsCatalog';
 
-test('PDF Studio contains all 7 categories and exactly 60 tools numbered 1 to 60', () => {
+test('PDF Studio contains all 7 categories and 66 tools numbered 1 to 66', () => {
   assert.equal(PDF_CATEGORIES.length, 7);
-  assert.equal(PDF_TOOLS.length, 60);
-  for (let i = 0; i < 60; i++) {
+  assert.equal(PDF_TOOLS.length, 66);
+  for (let i = 0; i < 66; i++) {
     assert.equal(PDF_TOOLS[i].number, i + 1);
     assert.equal(PDF_TOOLS[i].studio, 'pdf');
     assert.ok(PDF_TOOLS[i].name.length > 0);
   }
 });
 
-test('Image Studio contains all 6 categories and 49 tool groups numbered 1 to 49', () => {
+test('Image Studio contains all 6 categories and 55 tool groups numbered 1 to 55', () => {
   assert.equal(IMAGE_CATEGORIES.length, 6);
-  assert.equal(IMAGE_TOOLS.length, 49);
-  for (let i = 0; i < 49; i++) {
+  assert.equal(IMAGE_TOOLS.length, 55);
+  for (let i = 0; i < 55; i++) {
     assert.equal(IMAGE_TOOLS[i].number, i + 1);
     assert.equal(IMAGE_TOOLS[i].studio, 'image');
     assert.ok(IMAGE_TOOLS[i].name.length > 0);
   }
 });
 
-test('Extra Tools contains 5 categories and 32 tools numbered 1 to 32 with strict exclusions', () => {
+test('Extra Tools contains 5 categories and 38 tools numbered 1 to 38 with strict exclusions', () => {
   assert.equal(EXTRA_CATEGORIES.length, 5);
-  assert.equal(EXTRA_TOOLS.length, 32);
-  for (let i = 0; i < 32; i++) {
+  assert.equal(EXTRA_TOOLS.length, 38);
+  for (let i = 0; i < 38; i++) {
     assert.equal(EXTRA_TOOLS[i].number, i + 1);
     assert.equal(EXTRA_TOOLS[i].studio, 'extra');
     assert.ok(EXTRA_TOOLS[i].name.length > 0);
@@ -51,7 +51,7 @@ test('Filter presets exceed 310+ requirement and encryption profiles exceed 100+
   assert.ok(ENCRYPTION_104_PROFILES.length >= 100);
 });
 
-test('searchStudioTools filters accurately across PDF, Image, and Extra Tools (141 total tools)', () => {
+test('searchStudioTools filters accurately across PDF, Image, and Extra Tools (159 total tools)', () => {
   const batesResults = searchStudioTools('Bates', 'pdf');
   assert.equal(batesResults.length, 1);
   assert.equal(batesResults[0].number, 43);
@@ -65,7 +65,7 @@ test('searchStudioTools filters accurately across PDF, Image, and Extra Tools (1
   assert.equal(graphingResults[0].number, 9);
 
   const allTools = searchStudioTools('');
-  assert.equal(allTools.length, 141);
+  assert.equal(allTools.length, 159);
 });
 
 test('userStorage strictly isolates preferences and workspace snapshots per user.uid', async () => {
@@ -141,7 +141,7 @@ test('userStorage strictly isolates preferences and workspace snapshots per user
   assert.equal(bobSnap.importedHistory.length, 0);
 });
 
-test('MULTI_FILE_TOOL_IDS contains strictly the 10 canonical multi-file tools', async () => {
+test('MULTI_FILE_TOOL_IDS contains strictly the 11 canonical multi-file tools', async () => {
   const { MULTI_FILE_TOOL_IDS, isMultiFileToolId } = await import('./toolsCatalog');
   const expected = [
     'pdf-1-merge',
@@ -154,8 +154,10 @@ test('MULTI_FILE_TOOL_IDS contains strictly the 10 canonical multi-file tools', 
     'img-34-stitching',
     'img-35-stacking',
     'img-42-compare-slider',
+    'img-54-contact-sheet',
   ];
   assert.deepEqual(Array.from(MULTI_FILE_TOOL_IDS), expected);
   assert.equal(isMultiFileToolId('pdf-10-add-folders'), false);
   assert.equal(isMultiFileToolId('pdf-23-word-to-pdf'), false);
 });
+

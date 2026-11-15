@@ -78,7 +78,7 @@ export const CommandSearchModal: React.FC<CommandSearchModalProps> = ({
             type="text"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search all 141 tools across PDF, Image & Calculator and Converter Studio (e.g., Bates, Graphing, BMI, CAGR, Kuwahara)..."
+            placeholder="Search all 159 tools across PDF, Image & Calculator and Converter Studio (e.g., Bates, Invoice, Duotone, EMI, Graphing)..."
             aria-label="Search studio tools"
             className="w-full bg-transparent text-sm text-slate-900 dark:text-slate-100 placeholder-slate-400 focus:outline-none"
           />
@@ -106,12 +106,12 @@ export const CommandSearchModal: React.FC<CommandSearchModalProps> = ({
                 }`}
               >
                 {tab === 'all'
-                  ? 'All 141 Tools'
+                  ? 'All 159 Tools'
                   : tab === 'pdf'
-                  ? 'PDF Studio (60)'
+                  ? 'PDF Studio (66)'
                   : tab === 'image'
-                  ? 'Image Studio (49)'
-                  : 'Calculator & Converter Studio (32)'}
+                  ? 'Image Studio (55)'
+                  : 'Calculator & Converter Studio (38)'}
               </button>
             ))}
           </div>
@@ -243,7 +243,7 @@ export const CommandSearchModal: React.FC<CommandSearchModalProps> = ({
           })}
           {results.length === 0 && (
             <div className="py-12 text-center text-sm text-slate-500 dark:text-slate-400">
-              No tools matched &ldquo;{query}&rdquo;. Try searching by keyword or tool number (141 tools across all studios).
+              No tools matched &ldquo;{query}&rdquo;. Try searching by keyword or tool number (159 tools across all studios).
             </div>
           )}
         </div>

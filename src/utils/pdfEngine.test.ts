@@ -210,3 +210,62 @@ test('Non-direct PDF tools reject empty file arrays instead of falling back to s
     /requires.*input|upload/i
   );
 });
+
+test('Expanded PDF Studio Tools (#61 Insert Blank Pages, #62 Resize Pages, #63 TOC Builder, #64 Exhibit Sticker, #65 Dark Reader Theme, and #66 Standalone Invoice Builder) execute cleanly', async () => {
+  const sample = await createSamplePdfDocument('Expanded PDF Spec');
+  const files = [{ name: 'expanded.pdf', bytes: sample }];
+
+  // #61 Insert Blank / Ruled / Grid Pages
+  const inserted = await executePdfStudioTool('pdf-61-insert-blank-pages', files, {
+    pageStyle: 'ruled',
+    insertPosition: 'end',
+    count: 2,
+  });
+  assert.equal(inserted.pageCount, 6);
+
+  // #62 Scale & Resize Page Dimensions
+  const resized = await executePdfStudioTool('pdf-62-resize-pages', files, {
+    targetSize: 'LETTER',
+    orientation: 'landscape',
+    marginPt: 18,
+  });
+  assert.equal(resized.pageCount, 4);
+
+  // #63 Table of Contents & Outline Builder
+  const toc = await executePdfStudioTool('pdf-63-bookmarks-toc', files, {
+    tocTitle: 'PROJECT SPECIFICATION INDEX',
+    includeDotLeaders: true,
+  });
+  assert.equal(toc.pageCount, 5);
+  assert.ok(toc.previewText?.includes('Page 2'));
+
+  // #64 Legal Exhibit Sticker Stamping
+  const exhibit = await executePdfStudioTool('pdf-64-exhibit-sticker', files, {
+    exhibitLabel: 'EXHIBIT B',
+    docketNumber: 'CASE 2026-CV-99',
+    badgeColor: 'navy',
+    stampScope: 'all',
+  });
+  assert.equal(exhibit.pageCount, 4);
+
+  // #65 Dark-Mode / Invert PDF Reader Theme
+  const darkPdf = await executePdfStudioTool('pdf-65-invert-dark-pdf', files, {
+    readerTheme: 'dark-slate',
+    intensity: 40,
+  });
+  assert.equal(darkPdf.pageCount, 4);
+
+  // #66 Standalone PDF Invoice & Receipt Builder (works without uploaded files!)
+  const invoice = await executePdfStudioTool('pdf-66-invoice-generator', [], {
+    invoiceNumber: 'INV-2026-9001',
+    vendorName: 'Forma Engineering',
+    clientName: 'Global Client Corp',
+    lineItemsText: 'Architecture Audit | 2 | 500\nSupport Plan | 1 | 250',
+    taxPercent: 10,
+    currencySymbol: '$',
+  });
+  assert.equal(invoice.pageCount, 1);
+  assert.equal(invoice.mimeType, 'application/pdf');
+  assert.ok(invoice.previewText?.includes('Total Due: $1375.00'));
+});
+

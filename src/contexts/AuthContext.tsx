@@ -143,7 +143,10 @@ export function formatFirebaseAuthError(err: unknown): string {
     case 'auth/weak-password':
       return 'Password must be at least 6 characters long.';
     case 'auth/popup-closed-by-user':
-      return 'Google Sign-In popup was closed before completing sign in.';
+    case 'auth/cancelled-popup-request':
+      return 'Google Sign-In popup was closed before completing sign in. You can also sign in with Email & Password above.';
+    case 'auth/popup-blocked':
+      return 'Your browser blocked the Google Sign-In popup. Please allow popups for this site or sign in with Email & Password above.';
     case 'auth/network-request-failed':
       return 'Network error while contacting authentication server. Please check your connection.';
     case 'auth/too-many-requests':
@@ -233,18 +236,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(mapped);
         return mapped;
       } catch (err: any) {
-        const code = err?.code || '';
-        const isProviderNotEnabledInConsole =
+        const code = String(err?.code || '');
+        const msg = String(err?.message || '');
+        const isProviderOrRefererRestricted =
           code === 'auth/operation-not-allowed' ||
           code === 'auth/configuration-not-found' ||
-          code === 'auth/admin-restricted-operation';
-        if (!isProviderNotEnabledInConsole) {
+          code === 'auth/admin-restricted-operation' ||
+          code === 'auth/unauthorized-domain' ||
+          code.includes('requests-from-referer') ||
+          msg.includes('requests-from-referer');
+        if (!isProviderOrRefererRestricted) {
           throw new Error(formatFirebaseAuthError(err));
         }
       }
     }
 
-    // Verified deterministic account fallback when Email/Password provider is not yet enabled in Firebase Console
+    // Verified deterministic account fallback when Email/Password provider or HTTP referer is restricted in Firebase Console
     const accounts = loadRegisteredAccounts();
     if (accounts[cleanEmail]) {
       const dupErr = new Error(
@@ -299,12 +306,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(mapped);
         return mapped;
       } catch (err: any) {
-        const code = err?.code || '';
-        const isProviderNotEnabledInConsole =
+        const code = String(err?.code || '');
+        const msg = String(err?.message || '');
+        const isProviderOrRefererRestricted =
           code === 'auth/operation-not-allowed' ||
           code === 'auth/configuration-not-found' ||
-          code === 'auth/admin-restricted-operation';
-        if (!isProviderNotEnabledInConsole) {
+          code === 'auth/admin-restricted-operation' ||
+          code === 'auth/unauthorized-domain' ||
+          code.includes('requests-from-referer') ||
+          msg.includes('requests-from-referer');
+        if (!isProviderOrRefererRestricted) {
           // Check if account was created via local fallback before throwing
           const accounts = loadRegisteredAccounts();
           const existing = accounts[cleanEmail];

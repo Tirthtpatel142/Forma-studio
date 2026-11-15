@@ -41,13 +41,38 @@ export function processRgbaBuffer(
     }
   };
 
-  // #20 AI Background Remover (Chroma + Salient Edge Matting)
+  // #20 AI Background Remover (8-Point Perimeter Median Chroma + Feathered Salient Edge Matting)
   if (toolId === 'img-20-ai-bg-remove') {
     const tol = (Number(params.tolerance) || 32) * 1.8;
-    const bgR = srcData[0];
-    const bgG = srcData[1];
-    const bgB = srcData[2];
+    const sampleCoords: [number, number][] = [
+      [0, 0],
+      [Math.max(0, width - 1), 0],
+      [0, Math.max(0, height - 1)],
+      [Math.max(0, width - 1), Math.max(0, height - 1)],
+      [Math.floor(width / 2), 0],
+      [Math.floor(width / 2), Math.max(0, height - 1)],
+      [0, Math.floor(height / 2)],
+      [Math.max(0, width - 1), Math.floor(height / 2)],
+    ];
+    const rs: number[] = [];
+    const gs: number[] = [];
+    const bs: number[] = [];
+    for (const [sx, sy] of sampleCoords) {
+      const idx = (sy * width + sx) * 4;
+      rs.push(srcData[idx] ?? 0);
+      gs.push(srcData[idx + 1] ?? 0);
+      bs.push(srcData[idx + 2] ?? 0);
+    }
+    rs.sort((a, b) => a - b);
+    gs.sort((a, b) => a - b);
+    bs.sort((a, b) => a - b);
+    const mid = Math.floor(rs.length / 2);
+    const bgR = rs[mid] ?? srcData[0];
+    const bgG = gs[mid] ?? srcData[1];
+    const bgB = bs[mid] ?? srcData[2];
+
     const rep = String(params.replacementBg || 'transparent');
+    const softBand = Math.max(8, tol * 0.25);
     for (let y = 0; y < height; y++) {
       reportTileProgress(y);
       for (let x = 0; x < width; x++) {
@@ -68,6 +93,9 @@ export function processRgbaBuffer(
             out[i + 1] = 23;
             out[i + 2] = 42;
           }
+        } else if (dist < tol + softBand && rep === 'transparent') {
+          const alphaRatio = (dist - tol) / softBand;
+          out[i + 3] = Math.round(srcData[i + 3] * Math.min(1, Math.max(0, alphaRatio)));
         }
       }
     }
@@ -508,6 +536,47 @@ export function processRgbaBuffer(
     }
   }
 
+  // #52 Duotone & Split-Toning Studio
+  else if (toolId === 'img-52-duotone-studio') {
+    const parseHexRgb = (hex: string, fallback: [number, number, number]): [number, number, number] => {
+      const clean = String(hex || '').trim().replace(/^#/, '');
+      if (/^[0-9a-fA-F]{6}$/.test(clean)) {
+        return [
+          parseInt(clean.slice(0, 2), 16),
+          parseInt(clean.slice(2, 4), 16),
+          parseInt(clean.slice(4, 6), 16),
+        ];
+      }
+      return fallback;
+    };
+
+    const [sr, sg, sb] = parseHexRgb(String(params.shadowColor || '#1E1B4B'), [30, 27, 75]);
+    const [hr, hg, hb] = parseHexRgb(String(params.highlightColor || '#38BDF8'), [56, 189, 248]);
+    const contrastBoost = Math.max(0, Math.min(80, Number(params.contrastBoost ?? 25))) / 100;
+    const mixAmount = Math.max(0.2, Math.min(1, Number(params.mixAmount ?? 90) / 100));
+
+    for (let y = 0; y < height; y++) {
+      reportTileProgress(y);
+      for (let x = 0; x < width; x++) {
+        const i = (y * width + x) * 4;
+        const r = srcData[i];
+        const g = srcData[i + 1];
+        const b = srcData[i + 2];
+        let luma = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+        // S-curve contrast shaping
+        luma = Math.max(0, Math.min(1, (luma - 0.5) * (1 + contrastBoost * 1.4) + 0.5));
+
+        const duoR = sr + (hr - sr) * luma;
+        const duoG = sg + (hg - sg) * luma;
+        const duoB = sb + (hb - sb) * luma;
+
+        out[i] = Math.round(r * (1 - mixAmount) + duoR * mixAmount);
+        out[i + 1] = Math.round(g * (1 - mixAmount) + duoG * mixAmount);
+        out[i + 2] = Math.round(b * (1 - mixAmount) + duoB * mixAmount);
+      }
+    }
+  }
+
   if (onProgress) onProgress(100);
   return out;
 }
@@ -896,6 +965,7 @@ export async function executeImageStudioTool(
     'img-47-artistic',
     'img-48-color-correction',
     'img-49-glitch-distortion',
+    'img-52-duotone-studio',
   ]);
 
   if (workerTools.has(toolId)) {
@@ -1907,6 +1977,428 @@ export async function executeImageStudioTool(
       width: srcW,
       height: srcH,
       summary: `Traced raster image into ${levels}-level color-quantized SVG (${cols * rows} vector paths).`,
+    };
+  }
+
+  // #50 Passport & ID Photo Sheet Maker
+  if (toolId === 'img-50-passport-photo') {
+    const idStandard = String(params.idStandard || 'us-2x2');
+    const outputLayout = String(params.outputLayout || 'sheet-4x6');
+    const bgTint = String(params.bgTint || '#FFFFFF');
+
+    const stdSpecs: Record<string, { w: number; h: number; label: string }> = {
+      'us-2x2': { w: 600, h: 600, label: 'US 2×2 in (600×600 px)' },
+      'eu-35x45': { w: 413, h: 531, label: 'UK/EU 35×45 mm (413×531 px)' },
+      'ca-50x70': { w: 591, h: 827, label: 'Canada 50×70 mm (591×827 px)' },
+    };
+    const spec = stdSpecs[idStandard] || stdSpecs['us-2x2'];
+
+    // Center-crop portrait to target aspect ratio
+    const targetRatio = spec.w / spec.h;
+    const srcRatio = srcW / srcH;
+    let cropW = srcW;
+    let cropH = srcH;
+    if (srcRatio > targetRatio) {
+      cropW = Math.round(srcH * targetRatio);
+    } else {
+      cropH = Math.round(srcW / targetRatio);
+    }
+    const cropX = Math.round((srcW - cropW) / 2);
+    const cropY = Math.round((srcH - cropH) / 2);
+
+    const idCanvas = document.createElement('canvas');
+    idCanvas.width = spec.w;
+    idCanvas.height = spec.h;
+    const idCtx = idCanvas.getContext('2d')!;
+    idCtx.fillStyle = bgTint;
+    idCtx.fillRect(0, 0, spec.w, spec.h);
+    idCtx.drawImage(img, cropX, cropY, cropW, cropH, 0, 0, spec.w, spec.h);
+
+    if (outputLayout === 'single') {
+      const url = idCanvas.toDataURL('image/png');
+      if (onProgress) onProgress(100);
+      return {
+        outputDataUrl: url,
+        outputBytes: dataUrlToUint8Array(url),
+        mimeType: 'image/png',
+        fileName: `${baseName}_passport_${idStandard}.png`,
+        width: spec.w,
+        height: spec.h,
+        summary: `Cropped portrait to official ${spec.label} biometric specification.`,
+      };
+    }
+
+    // Printable 4x6-inch sheet at 300 DPI (1800 x 1200 px)
+    const sheetW = 1800;
+    const sheetH = 1200;
+    const sheetCanvas = document.createElement('canvas');
+    sheetCanvas.width = sheetW;
+    sheetCanvas.height = sheetH;
+    const sCtx = sheetCanvas.getContext('2d')!;
+    sCtx.fillStyle = '#FFFFFF';
+    sCtx.fillRect(0, 0, sheetW, sheetH);
+
+    const cols = idStandard === 'eu-35x45' ? 3 : 2;
+    const rows = 2;
+    const gap = 36;
+    const gridW = cols * spec.w + (cols - 1) * gap;
+    const gridH = rows * spec.h + (rows - 1) * gap;
+    const startX = Math.max(36, Math.round((sheetW - gridW) / 2));
+    const startY = Math.max(36, Math.round((sheetH - gridH) / 2));
+
+    let photoCount = 0;
+    for (let r = 0; r < rows; r++) {
+      for (let c = 0; c < cols; c++) {
+        const px = startX + c * (spec.w + gap);
+        const py = startY + r * (spec.h + gap);
+        if (px + spec.w <= sheetW - 20 && py + spec.h <= sheetH - 20) {
+          sCtx.drawImage(idCanvas, px, py);
+          sCtx.strokeStyle = '#94A3B8';
+          sCtx.lineWidth = 2;
+          sCtx.setLineDash([8, 6]);
+          sCtx.strokeRect(px, py, spec.w, spec.h);
+          sCtx.setLineDash([]);
+          photoCount++;
+        }
+      }
+    }
+
+    sCtx.fillStyle = '#475569';
+    sCtx.font = 'bold 20px monospace';
+    sCtx.fillText(`FORMA BIOMETRIC SHEET · ${spec.label.toUpperCase()} · ${photoCount} PRINTS ON 4×6" (300 DPI)`, 40, sheetH - 22);
+
+    const url = sheetCanvas.toDataURL('image/png');
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: url,
+      outputBytes: dataUrlToUint8Array(url),
+      mimeType: 'image/png',
+      fileName: `${baseName}_passport_sheet_4x6_${idStandard}.png`,
+      width: sheetW,
+      height: sheetH,
+      summary: `Generated 4×6" 300-DPI print sheet with ${photoCount} ${spec.label} biometric photos and cut guides.`,
+    };
+  }
+
+  // #51 Social Media Multi-Size Asset Kit (.zip)
+  if (toolId === 'img-51-social-kit-zip') {
+    const fitMode = String(params.fitMode || 'cover');
+    const brandTag = String(params.brandTag || '').trim();
+
+    const targets = [
+      { key: 'instagram_square_1080x1080', label: 'Instagram Square', w: 1080, h: 1080 },
+      { key: 'story_reel_1080x1920', label: 'Story / Reel', w: 1080, h: 1920 },
+      { key: 'youtube_thumb_1280x720', label: 'YouTube Thumbnail', w: 1280, h: 720 },
+      { key: 'opengraph_card_1200x630', label: 'OpenGraph Social Card', w: 1200, h: 630 },
+      { key: 'linkedin_banner_1584x396', label: 'LinkedIn Cover Banner', w: 1584, h: 396 },
+    ];
+
+    const zip = new JSZip();
+    let previewUrl = cleanPreviewPngUrl;
+
+    for (let i = 0; i < targets.length; i++) {
+      const t = targets[i];
+      const c = document.createElement('canvas');
+      c.width = t.w;
+      c.height = t.h;
+      const ctx = c.getContext('2d')!;
+      ctx.fillStyle = '#0F172A';
+      ctx.fillRect(0, 0, t.w, t.h);
+
+      const scaleCover = Math.max(t.w / srcW, t.h / srcH);
+      const scaleContain = Math.min(t.w / srcW, t.h / srcH);
+
+      if (fitMode === 'contain-blur') {
+        // Draw darkened cover backdrop first
+        const bgW = srcW * scaleCover;
+        const bgH = srcH * scaleCover;
+        ctx.globalAlpha = 0.28;
+        ctx.drawImage(img, (t.w - bgW) / 2, (t.h - bgH) / 2, bgW, bgH);
+        ctx.globalAlpha = 1.0;
+
+        const fgW = srcW * scaleContain;
+        const fgH = srcH * scaleContain;
+        ctx.drawImage(img, (t.w - fgW) / 2, (t.h - fgH) / 2, fgW, fgH);
+      } else {
+        const drawW = srcW * scaleCover;
+        const drawH = srcH * scaleCover;
+        ctx.drawImage(img, (t.w - drawW) / 2, (t.h - drawH) / 2, drawW, drawH);
+      }
+
+      if (brandTag) {
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
+        const bw = Math.min(t.w - 32, brandTag.length * 11 + 28);
+        ctx.fillRect(t.w - bw - 16, t.h - 44, bw, 30);
+        ctx.fillStyle = '#F8FAFC';
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillText(brandTag, t.w - bw - 4, t.h - 24);
+      }
+
+      const dataUrl = c.toDataURL('image/png');
+      if (i === 0) previewUrl = dataUrl;
+      zip.file(`${baseName}_${t.key}.png`, dataUrlToUint8Array(dataUrl));
+      if (onProgress) onProgress(Math.round(((i + 1) / targets.length) * 90));
+    }
+
+    const zipBytes = await zip.generateAsync({ type: 'uint8array' });
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: previewUrl,
+      outputBytes: zipBytes,
+      mimeType: 'application/zip',
+      fileName: `${baseName}_social_media_kit_5sizes.zip`,
+      width: 1080,
+      height: 1080,
+      summary: `Packaged 5 social media assets (IG Square, Story, YouTube, OpenGraph, LinkedIn) into "${baseName}_social_media_kit_5sizes.zip".`,
+      extraMeta: {
+        socialKitAssets: targets.map((t) => `${t.label} (${t.w}×${t.h})`),
+      },
+    };
+  }
+
+  // #53 RGB Histogram & Exposure Analyzer
+  if (toolId === 'img-53-histogram-analyzer') {
+    const chartStyle = String(params.chartStyle || 'rgb-luma');
+    const showClipping = Boolean(params.showClipping ?? true);
+
+    const histR = new Uint32Array(256);
+    const histG = new Uint32Array(256);
+    const histB = new Uint32Array(256);
+    const histL = new Uint32Array(256);
+
+    const data = srcImageData.data;
+    const totalPixels = Math.max(1, srcW * srcH);
+    let shadowClipped = 0;
+    let highlightClipped = 0;
+    let sumLuma = 0;
+
+    for (let i = 0; i < data.length; i += 4) {
+      const r = data[i];
+      const g = data[i + 1];
+      const b = data[i + 2];
+      const l = Math.min(255, Math.max(0, Math.round(0.299 * r + 0.587 * g + 0.114 * b)));
+      histR[r]++;
+      histG[g]++;
+      histB[b]++;
+      histL[l]++;
+      sumLuma += l;
+      if (l <= 4) shadowClipped++;
+      if (l >= 251) highlightClipped++;
+    }
+
+    const meanLuminance = Number((sumLuma / totalPixels).toFixed(1));
+    const shadowClipPct = Number(((shadowClipped / totalPixels) * 100).toFixed(2));
+    const highlightClipPct = Number(((highlightClipped / totalPixels) * 100).toFixed(2));
+
+    let maxBin = 1;
+    for (let b = 1; b < 255; b++) {
+      maxBin = Math.max(maxBin, histR[b], histG[b], histB[b], histL[b]);
+    }
+
+    const c = document.createElement('canvas');
+    const chartH = 220;
+    c.width = Math.max(640, srcW);
+    c.height = srcH + chartH;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#0B0F19';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(img, Math.round((c.width - srcW) / 2), 0);
+
+    const padX = 28;
+    const plotW = c.width - padX * 2;
+    const plotTop = srcH + 34;
+    const plotH = 145;
+
+    ctx.fillStyle = '#111827';
+    ctx.fillRect(padX, plotTop, plotW, plotH);
+    ctx.strokeStyle = '#1E293B';
+    ctx.strokeRect(padX, plotTop, plotW, plotH);
+
+    const drawChannelCurve = (bins: Uint32Array, stroke: string, fill: string, xStart: number, widthSpan: number) => {
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(xStart, plotTop + plotH);
+      for (let b = 0; b < 256; b++) {
+        const bx = xStart + (b / 255) * widthSpan;
+        const norm = Math.min(1, bins[b] / maxBin);
+        const by = plotTop + plotH - norm * (plotH - 10);
+        ctx.lineTo(bx, by);
+      }
+      ctx.lineTo(xStart + widthSpan, plotTop + plotH);
+      ctx.closePath();
+      ctx.fillStyle = fill;
+      ctx.fill();
+      ctx.strokeStyle = stroke;
+      ctx.lineWidth = 1.6;
+      ctx.stroke();
+      ctx.restore();
+    };
+
+    if (chartStyle === 'parade') {
+      const third = (plotW - 16) / 3;
+      drawChannelCurve(histR, '#EF4444', 'rgba(239, 68, 68, 0.28)', padX, third);
+      drawChannelCurve(histG, '#10B981', 'rgba(16, 185, 129, 0.28)', padX + third + 8, third);
+      drawChannelCurve(histB, '#3B82F6', 'rgba(59, 130, 246, 0.28)', padX + (third + 8) * 2, third);
+    } else {
+      drawChannelCurve(histR, '#EF4444', 'rgba(239, 68, 68, 0.22)', padX, plotW);
+      drawChannelCurve(histG, '#10B981', 'rgba(16, 185, 129, 0.22)', padX, plotW);
+      drawChannelCurve(histB, '#3B82F6', 'rgba(59, 130, 246, 0.22)', padX, plotW);
+      drawChannelCurve(histL, '#F8FAFC', 'rgba(248, 250, 252, 0.14)', padX, plotW);
+    }
+
+    if (showClipping) {
+      ctx.fillStyle = 'rgba(59, 130, 246, 0.35)';
+      ctx.fillRect(padX, plotTop, 8, plotH);
+      ctx.fillStyle = 'rgba(239, 68, 68, 0.35)';
+      ctx.fillRect(padX + plotW - 8, plotTop, 8, plotH);
+    }
+
+    ctx.fillStyle = '#F8FAFC';
+    ctx.font = 'bold 13px monospace';
+    ctx.fillText(
+      `RGB + LUMA HISTOGRAM · Mean Luma: ${meanLuminance}/255 · Shadows Clipped: ${shadowClipPct}% · Highlights Clipped: ${highlightClipPct}%`,
+      padX,
+      srcH + 22
+    );
+
+    const url = c.toDataURL('image/png');
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: url,
+      outputBytes: dataUrlToUint8Array(url),
+      mimeType: 'image/png',
+      fileName: `${baseName}_histogram_${chartStyle}.png`,
+      width: c.width,
+      height: c.height,
+      summary: `Analyzed 256-bin RGB histogram (Mean Luminance: ${meanLuminance}/255 · Shadow Clip: ${shadowClipPct}% · Highlight Clip: ${highlightClipPct}%).`,
+      extraMeta: {
+        meanLuminance,
+        shadowClippingPercent: shadowClipPct,
+        highlightClippingPercent: highlightClipPct,
+        totalPixels,
+      },
+    };
+  }
+
+  // #54 Contact Sheet / Proof Grid Maker (Multi-File)
+  if (toolId === 'img-54-contact-sheet') {
+    const allInputs = [{ name: sourceName, dataUrl: sourceDataUrl }, ...additionalImages];
+    const loadedImgs: Array<{ name: string; img: HTMLImageElement }> = [];
+    for (const item of allInputs) {
+      loadedImgs.push({ name: item.name, img: await loadImageElement(item.dataUrl) });
+    }
+
+    const cols = Math.max(2, Math.min(6, Number(params.columns) || 3));
+    const rows = Math.max(1, Math.ceil(loadedImgs.length / cols));
+    const sheetTitle = String(params.sheetTitle || 'FORMA STUDIO · ARCHIVAL CONTACT PROOF SHEET');
+    const showCaptions = Boolean(params.showCaptions ?? true);
+
+    const cellW = 360;
+    const cellH = showCaptions ? 310 : 260;
+    const pad = 28;
+    const headerH = 64;
+
+    const c = document.createElement('canvas');
+    c.width = cols * cellW + (cols + 1) * pad;
+    c.height = headerH + rows * cellH + (rows + 1) * pad;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = '#090D16';
+    ctx.fillRect(0, 0, c.width, c.height);
+
+    ctx.fillStyle = '#F8FAFC';
+    ctx.font = 'bold 16px monospace';
+    ctx.fillText(`${sheetTitle} (${loadedImgs.length} FRAMES)`, pad, 40);
+
+    loadedImgs.forEach((entry, idx) => {
+      const col = idx % cols;
+      const row = Math.floor(idx / cols);
+      const x = pad + col * (cellW + pad);
+      const y = headerH + pad + row * (cellH + pad);
+
+      ctx.fillStyle = '#111827';
+      ctx.fillRect(x, y, cellW, cellH);
+      ctx.strokeStyle = '#334155';
+      ctx.strokeRect(x, y, cellW, cellH);
+
+      const iw = entry.img.naturalWidth || entry.img.width;
+      const ih = entry.img.naturalHeight || entry.img.height;
+      const thumbBoxW = cellW - 24;
+      const thumbBoxH = showCaptions ? cellH - 64 : cellH - 24;
+      const scale = Math.min(thumbBoxW / iw, thumbBoxH / ih);
+      const dw = iw * scale;
+      const dh = ih * scale;
+      ctx.drawImage(entry.img, x + 12 + (thumbBoxW - dw) / 2, y + 12 + (thumbBoxH - dh) / 2, dw, dh);
+
+      if (showCaptions) {
+        ctx.fillStyle = '#38BDF8';
+        ctx.font = 'bold 12px monospace';
+        ctx.fillText(`#${String(idx + 1).padStart(2, '0')} · ${entry.name.slice(0, 24)}`, x + 12, y + cellH - 28);
+        ctx.fillStyle = '#94A3B8';
+        ctx.font = '11px monospace';
+        ctx.fillText(`${iw}×${ih} px`, x + 12, y + cellH - 12);
+      }
+    });
+
+    const url = c.toDataURL('image/png');
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: url,
+      outputBytes: dataUrlToUint8Array(url),
+      mimeType: 'image/png',
+      fileName: `${baseName}_contact_sheet_${loadedImgs.length}frames.png`,
+      width: c.width,
+      height: c.height,
+      summary: `Generated ${cols}-column contact proof sheet (${c.width}×${c.height} px) across ${loadedImgs.length} frame(s).`,
+    };
+  }
+
+  // #55 Seamless Tile & Pattern Repeater
+  if (toolId === 'img-55-tile-pattern') {
+    const gridRepeat = String(params.gridRepeat || '3x3');
+    const tilingMode = String(params.tilingMode || 'mirror');
+    const mult = gridRepeat === '4x4' ? 4 : gridRepeat === '2x2' ? 2 : 3;
+
+    const tileW = Math.min(480, srcW);
+    const tileH = Math.min(480, srcH);
+    const c = document.createElement('canvas');
+    c.width = tileW * mult;
+    c.height = tileH * mult;
+    const ctx = c.getContext('2d')!;
+
+    for (let r = 0; r < mult; r++) {
+      for (let col = 0; col < mult; col++) {
+        ctx.save();
+        const dx = col * tileW;
+        const dy = r * tileH;
+        ctx.translate(dx, dy);
+
+        if (tilingMode === 'mirror') {
+          const flipX = col % 2 === 1;
+          const flipY = r % 2 === 1;
+          ctx.translate(flipX ? tileW : 0, flipY ? tileH : 0);
+          ctx.scale(flipX ? -1 : 1, flipY ? -1 : 1);
+          ctx.drawImage(img, 0, 0, tileW, tileH);
+        } else if (tilingMode === 'half-drop' && r % 2 === 1) {
+          const offset = Math.round(tileW / 2);
+          ctx.drawImage(img, -offset, 0, tileW, tileH);
+          ctx.drawImage(img, tileW - offset, 0, tileW, tileH);
+        } else {
+          ctx.drawImage(img, 0, 0, tileW, tileH);
+        }
+        ctx.restore();
+      }
+    }
+
+    const url = c.toDataURL('image/png');
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: url,
+      outputBytes: dataUrlToUint8Array(url),
+      mimeType: 'image/png',
+      fileName: `${baseName}_pattern_${gridRepeat}_${tilingMode}.png`,
+      width: c.width,
+      height: c.height,
+      summary: `Synthesized ${gridRepeat} (${tilingMode}) repeating pattern canvas (${c.width}×${c.height} px).`,
     };
   }
 

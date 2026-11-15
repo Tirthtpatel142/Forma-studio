@@ -29,6 +29,7 @@ test('processRgbaBuffer executes Manual BG Eraser, De-noise, DocShadow, Dehaze, 
     'img-47-artistic',
     'img-48-color-correction',
     'img-49-glitch-distortion',
+    'img-52-duotone-studio',
   ];
 
   for (const toolId of toolsToTest) {

@@ -1645,3 +1645,547 @@ export function convertWorkbenchResultUnits(
           ];
   }
 }
+
+// ============================================================================
+// #33 LOAN & MORTGAGE EMI AMORTIZATION CALCULATOR
+// ============================================================================
+export interface LoanAmortizationYearRow {
+  year: number;
+  openingBalance: number;
+  principalPaid: number;
+  interestPaid: number;
+  extraPaid: number;
+  closingBalance: number;
+}
+
+export interface LoanEmiResult {
+  monthlyEmi: number;
+  totalPayment: number;
+  totalInterest: number;
+  principalPercent: number;
+  interestPercent: number;
+  payoffMonthsWithExtra: number;
+  interestSavedWithExtra: number;
+  yearlySchedule: LoanAmortizationYearRow[];
+  error?: string;
+}
+
+export function calculateLoanEmiAmortization(
+  principalAmount: number,
+  annualRatePercent: number,
+  tenureYears: number,
+  extraMonthlyPayment = 0
+): LoanEmiResult {
+  if (
+    !Number.isFinite(principalAmount) ||
+    principalAmount <= 0 ||
+    !Number.isFinite(annualRatePercent) ||
+    annualRatePercent < 0 ||
+    !Number.isFinite(tenureYears) ||
+    tenureYears <= 0
+  ) {
+    return {
+      monthlyEmi: 0,
+      totalPayment: 0,
+      totalInterest: 0,
+      principalPercent: 0,
+      interestPercent: 0,
+      payoffMonthsWithExtra: 0,
+      interestSavedWithExtra: 0,
+      yearlySchedule: [],
+      error: 'Loan principal and tenure must be positive numbers.',
+    };
+  }
+
+  const totalMonths = Math.max(1, Math.min(600, Math.round(tenureYears * 12)));
+  const monthlyRate = annualRatePercent / 100 / 12;
+  const extra = Math.max(0, Number(extraMonthlyPayment) || 0);
+
+  let monthlyEmi = 0;
+  if (monthlyRate === 0) {
+    monthlyEmi = principalAmount / totalMonths;
+  } else {
+    const factor = Math.pow(1 + monthlyRate, totalMonths);
+    monthlyEmi = (principalAmount * monthlyRate * factor) / (factor - 1);
+  }
+
+  const baselineTotalPayment = monthlyEmi * totalMonths;
+  const baselineTotalInterest = Math.max(0, baselineTotalPayment - principalAmount);
+
+  // Build actual amortization schedule (accounting for optional extraMonthlyPayment)
+  let balance = principalAmount;
+  let actualMonths = 0;
+  let actualTotalInterest = 0;
+  const yearlySchedule: LoanAmortizationYearRow[] = [];
+
+  const maxYears = Math.ceil(totalMonths / 12);
+  for (let yr = 1; yr <= maxYears && balance > 0.005; yr++) {
+    const openingBalance = balance;
+    let yrPrincipal = 0;
+    let yrInterest = 0;
+    let yrExtra = 0;
+
+    for (let m = 1; m <= 12 && balance > 0.005; m++) {
+      actualMonths++;
+      const interestForMonth = balance * monthlyRate;
+      let principalForMonth = monthlyEmi - interestForMonth;
+      if (principalForMonth > balance) {
+        principalForMonth = balance;
+      }
+      let extraForMonth = Math.min(extra, Math.max(0, balance - principalForMonth));
+      balance = Math.max(0, balance - principalForMonth - extraForMonth);
+
+      yrInterest += interestForMonth;
+      yrPrincipal += principalForMonth;
+      yrExtra += extraForMonth;
+      actualTotalInterest += interestForMonth;
+    }
+
+    yearlySchedule.push({
+      year: yr,
+      openingBalance,
+      principalPaid: yrPrincipal,
+      interestPaid: yrInterest,
+      extraPaid: yrExtra,
+      closingBalance: balance,
+    });
+  }
+
+  const totalPayment = principalAmount + actualTotalInterest;
+  const principalPercent = totalPayment > 0 ? (principalAmount / totalPayment) * 100 : 100;
+  const interestPercent = totalPayment > 0 ? (actualTotalInterest / totalPayment) * 100 : 0;
+  const interestSavedWithExtra = Math.max(0, baselineTotalInterest - actualTotalInterest);
+
+  return {
+    monthlyEmi,
+    totalPayment,
+    totalInterest: actualTotalInterest,
+    principalPercent,
+    interestPercent,
+    payoffMonthsWithExtra: actualMonths,
+    interestSavedWithExtra,
+    yearlySchedule,
+  };
+}
+
+// ============================================================================
+// #34 ROI, PROFIT MARGIN & BREAK-EVEN CALCULATOR
+// ============================================================================
+export interface RoiMarginBreakEvenResult {
+  unitContributionMargin: number;
+  grossMarginPercent: number;
+  markupPercent: number;
+  totalRevenue: number;
+  totalCost: number;
+  netProfit: number;
+  roiPercent: number;
+  breakEvenUnits: number | null;
+  breakEvenRevenue: number | null;
+  error?: string;
+}
+
+export function calculateRoiMarginBreakEven(
+  unitCost: number,
+  sellingPrice: number,
+  unitsSold: number,
+  fixedOverheadCost = 0
+): RoiMarginBreakEvenResult {
+  if (
+    !Number.isFinite(unitCost) ||
+    unitCost < 0 ||
+    !Number.isFinite(sellingPrice) ||
+    sellingPrice <= 0 ||
+    !Number.isFinite(unitsSold) ||
+    unitsSold < 0 ||
+    !Number.isFinite(fixedOverheadCost) ||
+    fixedOverheadCost < 0
+  ) {
+    return {
+      unitContributionMargin: 0,
+      grossMarginPercent: 0,
+      markupPercent: 0,
+      totalRevenue: 0,
+      totalCost: 0,
+      netProfit: 0,
+      roiPercent: 0,
+      breakEvenUnits: null,
+      breakEvenRevenue: null,
+      error: 'Selling price must be positive and costs must be non-negative.',
+    };
+  }
+
+  const unitContributionMargin = sellingPrice - unitCost;
+  const grossMarginPercent = (unitContributionMargin / sellingPrice) * 100;
+  const markupPercent = unitCost > 0 ? (unitContributionMargin / unitCost) * 100 : 100;
+
+  const totalRevenue = sellingPrice * unitsSold;
+  const totalVariableCost = unitCost * unitsSold;
+  const totalCost = totalVariableCost + fixedOverheadCost;
+  const netProfit = totalRevenue - totalCost;
+  const roiPercent = totalCost > 0 ? (netProfit / totalCost) * 100 : 0;
+
+  const breakEvenUnits =
+    unitContributionMargin > 0 ? Math.ceil(fixedOverheadCost / unitContributionMargin) : null;
+  const breakEvenRevenue = breakEvenUnits !== null ? breakEvenUnits * sellingPrice : null;
+
+  return {
+    unitContributionMargin,
+    grossMarginPercent,
+    markupPercent,
+    totalRevenue,
+    totalCost,
+    netProfit,
+    roiPercent,
+    breakEvenUnits,
+    breakEvenRevenue,
+  };
+}
+
+// ============================================================================
+// #35 OHM'S LAW & ELECTRICAL POWER CALCULATOR
+// ============================================================================
+export type OhmsSolveMode = 'from-v-i' | 'from-v-r' | 'from-i-r' | 'from-p-v';
+
+export interface OhmsLawResult {
+  voltageV: number;
+  currentA: number;
+  resistanceOhm: number;
+  powerW: number;
+  powerKw: number;
+  seriesReq: number;
+  parallelReq: number;
+  formulaUsed: string;
+  error?: string;
+}
+
+export function calculateOhmsLawAndPower(
+  mode: OhmsSolveMode,
+  inputA: number,
+  inputB: number,
+  resistorR1 = 100,
+  resistorR2 = 220
+): OhmsLawResult {
+  const r1 = Math.max(0.001, Number(resistorR1) || 100);
+  const r2 = Math.max(0.001, Number(resistorR2) || 220);
+  const seriesReq = r1 + r2;
+  const parallelReq = (r1 * r2) / (r1 + r2);
+
+  if (!Number.isFinite(inputA) || inputA <= 0 || !Number.isFinite(inputB) || inputB <= 0) {
+    return {
+      voltageV: 0,
+      currentA: 0,
+      resistanceOhm: 0,
+      powerW: 0,
+      powerKw: 0,
+      seriesReq,
+      parallelReq,
+      formulaUsed: '',
+      error: 'Both electrical input parameters must be positive values.',
+    };
+  }
+
+  let voltageV = 0;
+  let currentA = 0;
+  let resistanceOhm = 0;
+  let powerW = 0;
+  let formulaUsed = '';
+
+  if (mode === 'from-v-i') {
+    voltageV = inputA;
+    currentA = inputB;
+    resistanceOhm = voltageV / currentA;
+    powerW = voltageV * currentA;
+    formulaUsed = 'R = V / I  ·  P = V × I';
+  } else if (mode === 'from-v-r') {
+    voltageV = inputA;
+    resistanceOhm = inputB;
+    currentA = voltageV / resistanceOhm;
+    powerW = (voltageV * voltageV) / resistanceOhm;
+    formulaUsed = 'I = V / R  ·  P = V² / R';
+  } else if (mode === 'from-i-r') {
+    currentA = inputA;
+    resistanceOhm = inputB;
+    voltageV = currentA * resistanceOhm;
+    powerW = currentA * currentA * resistanceOhm;
+    formulaUsed = 'V = I × R  ·  P = I² × R';
+  } else {
+    powerW = inputA;
+    voltageV = inputB;
+    currentA = powerW / voltageV;
+    resistanceOhm = (voltageV * voltageV) / powerW;
+    formulaUsed = 'I = P / V  ·  R = V² / P';
+  }
+
+  return {
+    voltageV,
+    currentA,
+    resistanceOhm,
+    powerW,
+    powerKw: powerW / 1000,
+    seriesReq,
+    parallelReq,
+    formulaUsed,
+  };
+}
+
+// ============================================================================
+// #36 DESCRIPTIVE STATISTICS & STANDARD DEVIATION
+// ============================================================================
+export interface DescriptiveStatsResult {
+  count: number;
+  sum: number;
+  mean: number;
+  median: number;
+  modes: number[];
+  min: number;
+  max: number;
+  range: number;
+  sampleStdDev: number;
+  populationStdDev: number;
+  sampleVariance: number;
+  populationVariance: number;
+  q1: number;
+  q3: number;
+  iqr: number;
+  sortedValues: number[];
+  error?: string;
+}
+
+export function calculateDescriptiveStatistics(rawDataset: string): DescriptiveStatsResult {
+  const nums = String(rawDataset || '')
+    .split(/[\s,;]+/)
+    .map((s) => s.trim())
+    .filter(Boolean)
+    .map((s) => Number(s))
+    .filter((n) => Number.isFinite(n));
+
+  if (nums.length === 0) {
+    return {
+      count: 0,
+      sum: 0,
+      mean: 0,
+      median: 0,
+      modes: [],
+      min: 0,
+      max: 0,
+      range: 0,
+      sampleStdDev: 0,
+      populationStdDev: 0,
+      sampleVariance: 0,
+      populationVariance: 0,
+      q1: 0,
+      q3: 0,
+      iqr: 0,
+      sortedValues: [],
+      error: 'Enter at least one valid number separated by commas or spaces.',
+    };
+  }
+
+  const sorted = [...nums].sort((a, b) => a - b);
+  const count = sorted.length;
+  const sum = sorted.reduce((acc, v) => acc + v, 0);
+  const mean = sum / count;
+
+  const getMedianOfSlice = (arr: number[]): number => {
+    if (arr.length === 0) return 0;
+    const mid = Math.floor(arr.length / 2);
+    return arr.length % 2 === 1 ? arr[mid] : (arr[mid - 1] + arr[mid]) / 2;
+  };
+
+  const median = getMedianOfSlice(sorted);
+  const lowerHalf = sorted.slice(0, Math.floor(count / 2));
+  const upperHalf = sorted.slice(Math.ceil(count / 2));
+  const q1 = lowerHalf.length > 0 ? getMedianOfSlice(lowerHalf) : sorted[0];
+  const q3 = upperHalf.length > 0 ? getMedianOfSlice(upperHalf) : sorted[count - 1];
+  const iqr = q3 - q1;
+
+  const freqMap = new Map<number, number>();
+  let maxFreq = 0;
+  for (const n of sorted) {
+    const f = (freqMap.get(n) || 0) + 1;
+    freqMap.set(n, f);
+    if (f > maxFreq) maxFreq = f;
+  }
+  const modes: number[] = [];
+  if (maxFreq > 1) {
+    for (const [val, f] of freqMap.entries()) {
+      if (f === maxFreq) modes.push(val);
+    }
+  }
+
+  const sqDiffSum = sorted.reduce((acc, v) => acc + (v - mean) ** 2, 0);
+  const populationVariance = sqDiffSum / count;
+  const sampleVariance = count > 1 ? sqDiffSum / (count - 1) : 0;
+
+  return {
+    count,
+    sum,
+    mean,
+    median,
+    modes,
+    min: sorted[0],
+    max: sorted[count - 1],
+    range: sorted[count - 1] - sorted[0],
+    sampleStdDev: Math.sqrt(sampleVariance),
+    populationStdDev: Math.sqrt(populationVariance),
+    sampleVariance,
+    populationVariance,
+    q1,
+    q3,
+    iqr,
+    sortedValues: sorted,
+  };
+}
+
+// ============================================================================
+// #37 TYPOGRAPHY, REM/PX & DPI PRINT CONVERTER
+// ============================================================================
+export type TypographyUnit = 'px' | 'rem' | 'em' | 'pt' | 'pc' | 'mm' | 'in';
+
+export interface TypographyConversionResult {
+  px: number;
+  rem: number;
+  em: number;
+  pt: number;
+  pc: number;
+  mm: number;
+  inches: number;
+  cssSnippet: string;
+}
+
+export function convertTypographyAndCssUnits(
+  value: number,
+  fromUnit: TypographyUnit,
+  baseFontPx = 16,
+  dpi = 96
+): TypographyConversionResult {
+  const safeVal = Number.isFinite(value) && value >= 0 ? value : 0;
+  const rootPx = Math.max(1, Number(baseFontPx) || 16);
+  const safeDpi = Math.max(36, Number(dpi) || 96);
+
+  // Convert input into CSS pixels first
+  let px = safeVal;
+  if (fromUnit === 'rem' || fromUnit === 'em') {
+    px = safeVal * rootPx;
+  } else if (fromUnit === 'pt') {
+    px = (safeVal / 72) * safeDpi;
+  } else if (fromUnit === 'pc') {
+    px = ((safeVal * 12) / 72) * safeDpi;
+  } else if (fromUnit === 'in') {
+    px = safeVal * safeDpi;
+  } else if (fromUnit === 'mm') {
+    px = (safeVal / 25.4) * safeDpi;
+  }
+
+  const rem = px / rootPx;
+  const em = rem;
+  const inches = px / safeDpi;
+  const pt = inches * 72;
+  const pc = pt / 12;
+  const mm = inches * 25.4;
+
+  return {
+    px,
+    rem,
+    em,
+    pt,
+    pc,
+    mm,
+    inches,
+    cssSnippet: `font-size: ${formatCleanNumber(rem, 4)}rem; /* ${formatCleanNumber(px, 2)}px @ ${rootPx}px root */`,
+  };
+}
+
+// ============================================================================
+// #38 DATA TRANSFER TIME & BANDWIDTH CALCULATOR
+// ============================================================================
+export interface BandwidthTransferResult {
+  totalSeconds: number;
+  formattedDuration: string;
+  effectiveSpeedMbps: number;
+  effectiveBytesPerSec: number;
+  speedComparisonTable: Array<{ label: string; mbps: number; formattedTime: string }>;
+  error?: string;
+}
+
+export function calculateBandwidthTransferTime(
+  fileSize: number,
+  fileSizeUnit: 'MB' | 'GB' | 'TB' | 'GiB',
+  bandwidthSpeed: number,
+  bandwidthUnit: 'Mbps' | 'Gbps' | 'MB/s',
+  overheadPercent = 5
+): BandwidthTransferResult {
+  if (!Number.isFinite(fileSize) || fileSize <= 0 || !Number.isFinite(bandwidthSpeed) || bandwidthSpeed <= 0) {
+    return {
+      totalSeconds: 0,
+      formattedDuration: '0s',
+      effectiveSpeedMbps: 0,
+      effectiveBytesPerSec: 0,
+      speedComparisonTable: [],
+      error: 'File size and network speed must be positive numbers.',
+    };
+  }
+
+  const byteMultipliers: Record<string, number> = {
+    MB: 1e6,
+    GB: 1e9,
+    TB: 1e12,
+    GiB: 1024 ** 3,
+  };
+  const totalBytes = fileSize * (byteMultipliers[fileSizeUnit] || 1e9);
+  const totalBits = totalBytes * 8;
+
+  const rawMbps =
+    bandwidthUnit === 'Gbps'
+      ? bandwidthSpeed * 1000
+      : bandwidthUnit === 'MB/s'
+      ? bandwidthSpeed * 8
+      : bandwidthSpeed;
+
+  const clampedOverhead = Math.max(0, Math.min(40, Number(overheadPercent) || 0));
+  const effectiveSpeedMbps = rawMbps * (1 - clampedOverhead / 100);
+  const effectiveBitsPerSec = effectiveSpeedMbps * 1e6;
+  const effectiveBytesPerSec = effectiveBitsPerSec / 8;
+
+  const formatDurationSeconds = (secs: number): string => {
+    if (!Number.isFinite(secs) || secs <= 0) return '0s';
+    if (secs < 1) return `${(secs * 1000).toFixed(0)} ms`;
+    const hrs = Math.floor(secs / 3600);
+    const mins = Math.floor((secs % 3600) / 60);
+    const remSecs = secs % 60;
+    const parts: string[] = [];
+    if (hrs > 0) parts.push(`${hrs}h`);
+    if (mins > 0) parts.push(`${mins}m`);
+    if (remSecs >= 0.05 || parts.length === 0) {
+      parts.push(`${hrs === 0 && mins === 0 ? remSecs.toFixed(2) : Math.round(remSecs)}s`);
+    }
+    return parts.join(' ');
+  };
+
+  const totalSeconds = totalBits / effectiveBitsPerSec;
+  const presets = [
+    { label: '4G LTE Mobile (35 Mbps)', mbps: 35 },
+    { label: 'Fast Broadband (100 Mbps)', mbps: 100 },
+    { label: '5G / Fiber Half-Gig (500 Mbps)', mbps: 500 },
+    { label: '1 Gbps Fiber Optic (1,000 Mbps)', mbps: 1000 },
+    { label: '10 Gbps Data Center Link (10,000 Mbps)', mbps: 10000 },
+  ];
+
+  const speedComparisonTable = presets.map((p) => {
+    const effBits = p.mbps * (1 - clampedOverhead / 100) * 1e6;
+    return {
+      label: p.label,
+      mbps: p.mbps,
+      formattedTime: formatDurationSeconds(totalBits / effBits),
+    };
+  });
+
+  return {
+    totalSeconds,
+    formattedDuration: formatDurationSeconds(totalSeconds),
+    effectiveSpeedMbps,
+    effectiveBytesPerSec,
+    speedComparisonTable,
+  };
+}
+

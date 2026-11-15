@@ -14,6 +14,7 @@ import {
   HeartPulse,
   DollarSign,
   AlertTriangle,
+  Download,
 } from 'lucide-react';
 import { StudioTool } from '../data/toolsCatalog';
 import {
@@ -33,6 +34,14 @@ import {
   calculateOneRepMax,
   calculateCompoundInterestExact,
   calculateExactAgeChronological,
+  calculateLoanEmiAmortization,
+  calculateRoiMarginBreakEven,
+  calculateOhmsLawAndPower,
+  OhmsSolveMode,
+  calculateDescriptiveStatistics,
+  convertTypographyAndCssUnits,
+  TypographyUnit,
+  calculateBandwidthTransferTime,
 } from '../utils/extraToolsEngine';
 import type { CalcHistoryEntry } from '../utils/userStorage';
 
@@ -269,6 +278,47 @@ function getDefaultToolState(toolId: string): Record<string, any> {
       };
     case 'extra-32-one-rep-max':
       return { weight: 100, reps: 5, unit: 'kg' };
+    case 'extra-33-loan-emi':
+      return {
+        principalAmount: 350000,
+        annualRatePercent: 6.5,
+        tenureYears: 30,
+        extraMonthlyPayment: 200,
+      };
+    case 'extra-34-roi-margin':
+      return {
+        unitCost: 42,
+        sellingPrice: 95,
+        unitsSold: 500,
+        fixedOverheadCost: 12000,
+      };
+    case 'extra-35-ohms-law':
+      return {
+        solveMode: 'from-v-i' as OhmsSolveMode,
+        inputA: 24,
+        inputB: 2.5,
+        resistorR1: 100,
+        resistorR2: 220,
+      };
+    case 'extra-36-statistics-calc':
+      return {
+        datasetText: '12, 15, 18, 22, 22, 25, 29, 34, 41, 48',
+      };
+    case 'extra-37-typography-css':
+      return {
+        value: 24,
+        fromUnit: 'px' as TypographyUnit,
+        baseFontPx: 16,
+        dpi: 96,
+      };
+    case 'extra-38-bandwidth-transfer':
+      return {
+        fileSize: 25,
+        fileSizeUnit: 'GB',
+        bandwidthSpeed: 250,
+        bandwidthUnit: 'Mbps',
+        overheadPercent: 5,
+      };
     default:
       return {};
   }
@@ -1169,6 +1219,91 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
                   <span className="font-semibold">{formatCleanNumber(effectivePeriodicRatePct, 4)}%</span>
                 </div>
               </div>
+
+              {/* Year-by-Year Compounding Schedule & CSV Export */}
+              <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <button
+                    type="button"
+                    onClick={() => updateState({ showSchedule: !toolState.showSchedule })}
+                    className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+                  >
+                    {toolState.showSchedule
+                      ? 'Hide Year-by-Year Schedule'
+                      : `View Year-by-Year Schedule (${Math.max(1, Math.min(50, Math.round(numVal(toolState.years, 10))))} Years)`}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const totalYrs = Math.max(1, Math.min(50, Math.round(numVal(toolState.years, 10))));
+                      const rows: string[] = ['Year,Principal_Contributed,Interest_Earned,Ending_Balance'];
+                      for (let y = 1; y <= totalYrs; y++) {
+                        const stepCi = calculateCompoundInterestExact({
+                          principal: numVal(toolState.principal, 0),
+                          annualRatePct: numVal(toolState.annualRate, 0),
+                          compoundingPerYear: numVal(toolState.compoundingPerYear, 12),
+                          years: y,
+                          contribution: numVal(toolState.contribution, 0),
+                          contributionCadence:
+                            toolState.contributionCadence === 'annual' ? 'annual' : 'monthly',
+                        });
+                        rows.push(
+                          `${y},${stepCi.totalPrincipalContributed.toFixed(2)},${stepCi.totalInterestEarned.toFixed(2)},${stepCi.finalBalance.toFixed(2)}`
+                        );
+                      }
+                      const blob = new Blob([rows.join('\n')], { type: 'text/csv;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'compound_schedule_yearly.csv';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      onNotify?.('Exported Year-by-Year Schedule CSV');
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-mono bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded flex items-center gap-1 transition-colors"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Export Schedule CSV</span>
+                  </button>
+                </div>
+
+                {Boolean(toolState.showSchedule) && (
+                  <div className="max-h-48 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg divide-y divide-slate-100 dark:divide-slate-800 text-[11px] font-mono tabular-nums">
+                    <div className="px-3 py-1.5 bg-slate-50 dark:bg-slate-950 font-bold text-slate-600 dark:text-slate-300 grid grid-cols-4 gap-2">
+                      <span>Year</span>
+                      <span>Principal</span>
+                      <span>Interest</span>
+                      <span className="text-right">Balance</span>
+                    </div>
+                    {Array.from({
+                      length: Math.max(1, Math.min(50, Math.round(numVal(toolState.years, 10)))),
+                    }).map((_, idx) => {
+                      const yr = idx + 1;
+                      const stepCi = calculateCompoundInterestExact({
+                        principal: numVal(toolState.principal, 0),
+                        annualRatePct: numVal(toolState.annualRate, 0),
+                        compoundingPerYear: numVal(toolState.compoundingPerYear, 12),
+                        years: yr,
+                        contribution: numVal(toolState.contribution, 0),
+                        contributionCadence:
+                          toolState.contributionCadence === 'annual' ? 'annual' : 'monthly',
+                      });
+                      return (
+                        <div key={yr} className="px-3 py-1.5 grid grid-cols-4 gap-2">
+                          <span className="text-slate-500">Yr {yr}</span>
+                          <span>${formatCleanNumber(stepCi.totalPrincipalContributed, 0)}</span>
+                          <span className="text-emerald-600 dark:text-emerald-400">
+                            +${formatCleanNumber(stepCi.totalInterestEarned, 0)}
+                          </span>
+                          <span className="text-right font-semibold">
+                            ${formatCleanNumber(stepCi.finalBalance, 0)}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         ),
@@ -2047,6 +2182,23 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
                   >
                     Origin [-10, 10]
                   </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const canvas = graphCanvasRef.current;
+                      if (!canvas) return;
+                      const dataUrl = canvas.toDataURL('image/png');
+                      const a = document.createElement('a');
+                      a.href = dataUrl;
+                      a.download = 'forma_2d_graph.png';
+                      a.click();
+                      onNotify?.('Downloaded 2D Graph PNG');
+                    }}
+                    className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded flex items-center gap-1"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>Download Graph PNG</span>
+                  </button>
                 </div>
               </div>
 
@@ -2672,13 +2824,23 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
                 </div>
               )}
 
-              <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
-                <div className="text-xs text-emerald-800 dark:text-emerald-300">
-                  {formatCleanNumber(val, 6)} {fromMeta.label} =
+              <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg flex items-center justify-between gap-3">
+                <div>
+                  <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                    {formatCleanNumber(val, 6)} {fromMeta.label} =
+                  </div>
+                  <div className="text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300 mt-1">
+                    {primaryFormatted} {toMeta.symbol}
+                  </div>
                 </div>
-                <div className="text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300 mt-1">
-                  {primaryFormatted} {toMeta.symbol}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(primaryFormatted)}
+                  className="px-2.5 py-1.5 text-xs font-semibold bg-white dark:bg-slate-900 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 rounded-lg hover:bg-emerald-100/60 dark:hover:bg-slate-800 flex items-center gap-1.5 shrink-0"
+                >
+                  <Copy className="w-3.5 h-3.5" />
+                  <span>Copy Numeric Value</span>
+                </button>
               </div>
             </div>
 
@@ -3767,6 +3929,913 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
     }
 
     // ------------------------------------------------------------------------
+    // #33 LOAN & MORTGAGE EMI AMORTIZATION CALCULATOR
+    // ------------------------------------------------------------------------
+    if (id === 'extra-33-loan-emi') {
+      const principalAmount = numVal(toolState.principalAmount, 350000);
+      const annualRatePercent = numVal(toolState.annualRatePercent, 6.5);
+      const tenureYears = numVal(toolState.tenureYears, 30);
+      const extraMonthlyPayment = numVal(toolState.extraMonthlyPayment, 0);
+
+      const emiRes = calculateLoanEmiAmortization(
+        principalAmount,
+        annualRatePercent,
+        tenureYears,
+        extraMonthlyPayment
+      );
+
+      const summary = emiRes.error
+        ? emiRes.error
+        : `Loan $${principalAmount.toLocaleString()} @ ${annualRatePercent}% (${tenureYears}y) → Monthly EMI: $${formatCleanNumber(emiRes.monthlyEmi, 2)} | Total Interest: $${formatCleanNumber(emiRes.totalInterest, 2)} | Total Payable: $${formatCleanNumber(emiRes.totalPayment, 2)}`;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="space-y-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Loan & Mortgage Parameters
+                </h3>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Loan Principal Amount ($)
+                    </label>
+                    <input
+                      type="number"
+                      min={100}
+                      step="1000"
+                      value={toolState.principalAmount}
+                      onChange={(e) => updateState({ principalAmount: parseNumInput(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Annual Interest Rate (% APR)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      max={40}
+                      step="0.1"
+                      value={toolState.annualRatePercent}
+                      onChange={(e) => updateState({ annualRatePercent: parseNumInput(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Loan Tenure (Years)
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      max={50}
+                      value={toolState.tenureYears}
+                      onChange={(e) => updateState({ tenureYears: parseNumInput(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                      Extra Monthly Prepayment ($)
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      step="50"
+                      value={toolState.extraMonthlyPayment}
+                      onChange={(e) => updateState({ extraMonthlyPayment: parseNumInput(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Monthly EMI & Amortization Breakdown
+                </h3>
+                {emiRes.error ? (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                    {emiRes.error}
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
+                        <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                          Scheduled Monthly EMI
+                        </div>
+                        <div className="text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300 mt-1">
+                          ${formatCleanNumber(emiRes.monthlyEmi, 2)}
+                        </div>
+                      </div>
+                      <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/70 rounded-lg">
+                        <div className="text-xs text-blue-800 dark:text-blue-300">
+                          Total Interest Payable
+                        </div>
+                        <div className="text-2xl font-bold font-mono tabular-nums text-blue-700 dark:text-blue-300 mt-1">
+                          ${formatCleanNumber(emiRes.totalInterest, 2)}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Principal vs Interest Visual Bar */}
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-[11px] font-mono">
+                        <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
+                          Principal: {formatCleanNumber(emiRes.principalPercent, 1)}%
+                        </span>
+                        <span className="text-amber-600 dark:text-amber-400 font-semibold">
+                          Interest: {formatCleanNumber(emiRes.interestPercent, 1)}%
+                        </span>
+                      </div>
+                      <div className="h-2.5 w-full rounded-full bg-slate-200 dark:bg-slate-800 overflow-hidden flex">
+                        <div
+                          className="bg-emerald-500 h-full"
+                          style={{ width: `${Math.min(100, Math.max(0, emiRes.principalPercent))}%` }}
+                        />
+                        <div
+                          className="bg-amber-500 h-full"
+                          style={{ width: `${Math.min(100, Math.max(0, emiRes.interestPercent))}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono tabular-nums">
+                      <div className="py-1.5 flex justify-between">
+                        <span className="text-slate-500">Total Principal + Interest</span>
+                        <span className="font-semibold">${formatCleanNumber(emiRes.totalPayment, 2)}</span>
+                      </div>
+                      <div className="py-1.5 flex justify-between">
+                        <span className="text-slate-500">Actual Payoff Duration</span>
+                        <span className="font-semibold">
+                          {emiRes.payoffMonthsWithExtra} mos ({formatCleanNumber(emiRes.payoffMonthsWithExtra / 12, 1)} yrs)
+                        </span>
+                      </div>
+                      {extraMonthlyPayment > 0 && (
+                        <div className="py-1.5 flex justify-between text-emerald-600 dark:text-emerald-400">
+                          <span>Interest Saved via Prepayment</span>
+                          <span className="font-bold">${formatCleanNumber(emiRes.interestSavedWithExtra, 2)}</span>
+                        </div>
+                      )}
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+
+            {/* Collapsible Year-by-Year Amortization Table + CSV Export */}
+            {emiRes.yearlySchedule.length > 0 && (
+              <details className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl group">
+                <summary className="cursor-pointer flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-200">
+                  <span>
+                    Year-by-Year Loan Amortization Schedule ({emiRes.yearlySchedule.length} Years)
+                  </span>
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      const header = 'Year,Opening_Balance,Principal_Paid,Interest_Paid,Extra_Prepayment,Closing_Balance';
+                      const rows = emiRes.yearlySchedule.map(
+                        (r) =>
+                          `${r.year},${r.openingBalance.toFixed(2)},${r.principalPaid.toFixed(2)},${r.interestPaid.toFixed(2)},${r.extraPaid.toFixed(2)},${r.closingBalance.toFixed(2)}`
+                      );
+                      const blob = new Blob([[header, ...rows].join('\n')], { type: 'text/csv;charset=utf-8' });
+                      const url = URL.createObjectURL(blob);
+                      const a = document.createElement('a');
+                      a.href = url;
+                      a.download = 'forma_loan_amortization_schedule.csv';
+                      a.click();
+                      URL.revokeObjectURL(url);
+                      onNotify?.('Exported Loan Amortization Schedule (.CSV)');
+                    }}
+                    className="px-2.5 py-1 text-[11px] font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded flex items-center gap-1"
+                  >
+                    <Download className="w-3 h-3" />
+                    <span>Export CSV</span>
+                  </button>
+                </summary>
+                <div className="mt-3 max-h-64 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+                  <table className="w-full text-left text-xs font-mono tabular-nums">
+                    <thead className="bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 sticky top-0">
+                      <tr>
+                        <th className="px-3 py-2">Year</th>
+                        <th className="px-3 py-2">Opening</th>
+                        <th className="px-3 py-2">Principal</th>
+                        <th className="px-3 py-2">Interest</th>
+                        <th className="px-3 py-2">Closing Balance</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                      {emiRes.yearlySchedule.map((row) => (
+                        <tr key={row.year}>
+                          <td className="px-3 py-1.5 font-bold">Yr {row.year}</td>
+                          <td className="px-3 py-1.5">${formatCleanNumber(row.openingBalance, 0)}</td>
+                          <td className="px-3 py-1.5 text-emerald-600 dark:text-emerald-400">
+                            ${formatCleanNumber(row.principalPaid + row.extraPaid, 0)}
+                          </td>
+                          <td className="px-3 py-1.5 text-amber-600 dark:text-amber-400">
+                            ${formatCleanNumber(row.interestPaid, 0)}
+                          </td>
+                          <td className="px-3 py-1.5 font-semibold">${formatCleanNumber(row.closingBalance, 0)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </details>
+            )}
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #34 ROI, PROFIT MARGIN & BREAK-EVEN CALCULATOR
+    // ------------------------------------------------------------------------
+    if (id === 'extra-34-roi-margin') {
+      const unitCost = numVal(toolState.unitCost, 42);
+      const sellingPrice = numVal(toolState.sellingPrice, 95);
+      const unitsSold = numVal(toolState.unitsSold, 500);
+      const fixedOverheadCost = numVal(toolState.fixedOverheadCost, 12000);
+
+      const roiRes = calculateRoiMarginBreakEven(
+        unitCost,
+        sellingPrice,
+        unitsSold,
+        fixedOverheadCost
+      );
+
+      const summary = roiRes.error
+        ? roiRes.error
+        : `Gross Margin: ${formatCleanNumber(roiRes.grossMarginPercent, 2)}% | Markup: ${formatCleanNumber(roiRes.markupPercent, 2)}% | Net Profit: $${formatCleanNumber(roiRes.netProfit, 2)} | ROI: ${formatCleanNumber(roiRes.roiPercent, 2)}% | Break-Even: ${roiRes.breakEvenUnits ?? 'N/A'} units`;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Unit Economics & Fixed Overhead Inputs
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Variable Unit Cost ($)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="1"
+                    value={toolState.unitCost}
+                    onChange={(e) => updateState({ unitCost: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Unit Selling Price ($)
+                  </label>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step="1"
+                    value={toolState.sellingPrice}
+                    onChange={(e) => updateState({ sellingPrice: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Target Volume (Units Sold)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="10"
+                    value={toolState.unitsSold}
+                    onChange={(e) => updateState({ unitsSold: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Fixed Overhead Cost ($)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="500"
+                    value={toolState.fixedOverheadCost}
+                    onChange={(e) => updateState({ fixedOverheadCost: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Profitability, ROI & Break-Even Analysis
+              </h3>
+              {roiRes.error ? (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                  {roiRes.error}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
+                      <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                        Gross Profit Margin
+                      </div>
+                      <div className="text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300 mt-1">
+                        {formatCleanNumber(roiRes.grossMarginPercent, 2)}%
+                      </div>
+                      <div className="text-[11px] font-mono text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                        Markup: {formatCleanNumber(roiRes.markupPercent, 2)}%
+                      </div>
+                    </div>
+                    <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/70 rounded-lg">
+                      <div className="text-xs text-blue-800 dark:text-blue-300">
+                        Return on Investment (ROI)
+                      </div>
+                      <div className="text-2xl font-bold font-mono tabular-nums text-blue-700 dark:text-blue-300 mt-1">
+                        {formatCleanNumber(roiRes.roiPercent, 2)}%
+                      </div>
+                      <div className="text-[11px] font-mono text-blue-700/80 dark:text-blue-400/80 mt-0.5">
+                        Net: ${formatCleanNumber(roiRes.netProfit, 2)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono tabular-nums">
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Contribution Margin per Unit</span>
+                      <span className="font-semibold">${formatCleanNumber(roiRes.unitContributionMargin, 2)} / unit</span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Total Gross Revenue ({unitsSold} units)</span>
+                      <span className="font-semibold">${formatCleanNumber(roiRes.totalRevenue, 2)}</span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Total Cost (Variable + Fixed)</span>
+                      <span className="font-semibold">${formatCleanNumber(roiRes.totalCost, 2)}</span>
+                    </div>
+                    <div className="py-1.5 flex justify-between text-emerald-600 dark:text-emerald-400">
+                      <span>Break-Even Volume & Revenue</span>
+                      <span className="font-bold">
+                        {roiRes.breakEvenUnits !== null
+                          ? `${roiRes.breakEvenUnits.toLocaleString()} units ($${formatCleanNumber(roiRes.breakEvenRevenue || 0, 2)})`
+                          : 'Unreachable (Price ≤ Unit Cost)'}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #35 OHM'S LAW & ELECTRICAL POWER CALCULATOR
+    // ------------------------------------------------------------------------
+    if (id === 'extra-35-ohms-law') {
+      const solveMode: OhmsSolveMode = toolState.solveMode || 'from-v-i';
+      const inputA = numVal(toolState.inputA, 24);
+      const inputB = numVal(toolState.inputB, 2.5);
+      const resistorR1 = numVal(toolState.resistorR1, 100);
+      const resistorR2 = numVal(toolState.resistorR2, 220);
+
+      const ohmRes = calculateOhmsLawAndPower(solveMode, inputA, inputB, resistorR1, resistorR2);
+
+      const modeLabels: Record<OhmsSolveMode, { labelA: string; labelB: string }> = {
+        'from-v-i': { labelA: 'Voltage V (Volts)', labelB: 'Current I (Amperes)' },
+        'from-v-r': { labelA: 'Voltage V (Volts)', labelB: 'Resistance R (Ohms Ω)' },
+        'from-i-r': { labelA: 'Current I (Amperes)', labelB: 'Resistance R (Ohms Ω)' },
+        'from-p-v': { labelA: 'Power P (Watts)', labelB: 'Voltage V (Volts)' },
+      };
+      const activeLabels = modeLabels[solveMode] || modeLabels['from-v-i'];
+
+      const summary = ohmRes.error
+        ? ohmRes.error
+        : `V = ${formatCleanNumber(ohmRes.voltageV, 4)} V | I = ${formatCleanNumber(ohmRes.currentA, 4)} A | R = ${formatCleanNumber(ohmRes.resistanceOhm, 4)} Ω | P = ${formatCleanNumber(ohmRes.powerW, 4)} W`;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Ohm&apos;s Law Known Parameters & Resistor Network
+              </h3>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  Known Input Pair
+                </label>
+                <select
+                  value={solveMode}
+                  onChange={(e) => updateState({ solveMode: e.target.value as OhmsSolveMode })}
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono"
+                >
+                  <option value="from-v-i">Given Voltage (V) & Current (I) → Solve R & P</option>
+                  <option value="from-v-r">Given Voltage (V) & Resistance (R) → Solve I & P</option>
+                  <option value="from-i-r">Given Current (I) & Resistance (R) → Solve V & P</option>
+                  <option value="from-p-v">Given Power (P) & Voltage (V) → Solve I & R</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    {activeLabels.labelA}
+                  </label>
+                  <input
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={toolState.inputA}
+                    onChange={(e) => updateState({ inputA: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    {activeLabels.labelB}
+                  </label>
+                  <input
+                    type="number"
+                    min={0.001}
+                    step="any"
+                    value={toolState.inputB}
+                    onChange={(e) => updateState({ inputB: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                  Series / Parallel Resistor Network Solver (R₁ & R₂)
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-mono text-slate-500">Resistor R₁ (Ω)</label>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step="any"
+                      value={toolState.resistorR1}
+                      onChange={(e) => updateState({ resistorR1: parseNumInput(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-mono tabular-nums"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[11px] font-mono text-slate-500">Resistor R₂ (Ω)</label>
+                    <input
+                      type="number"
+                      min={0.1}
+                      step="any"
+                      value={toolState.resistorR2}
+                      onChange={(e) => updateState({ resistorR2: parseNumInput(e.target.value) })}
+                      className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-mono tabular-nums"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Solved Electrical Quantities (V, I, R, P)
+              </h3>
+              {ohmRes.error ? (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                  {ohmRes.error}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
+                      <div className="text-[11px] text-emerald-800 dark:text-emerald-300">Voltage (V)</div>
+                      <div className="text-xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
+                        {formatCleanNumber(ohmRes.voltageV, 4)} V
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/70 rounded-lg">
+                      <div className="text-[11px] text-blue-800 dark:text-blue-300">Current (I)</div>
+                      <div className="text-xl font-bold font-mono tabular-nums text-blue-700 dark:text-blue-300">
+                        {formatCleanNumber(ohmRes.currentA, 4)} A
+                      </div>
+                    </div>
+                    <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/70 rounded-lg">
+                      <div className="text-[11px] text-amber-800 dark:text-amber-300">Resistance (R)</div>
+                      <div className="text-xl font-bold font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                        {formatCleanNumber(ohmRes.resistanceOhm, 4)} Ω
+                      </div>
+                    </div>
+                    <div className="p-3 bg-purple-50/70 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-900/70 rounded-lg">
+                      <div className="text-[11px] text-purple-800 dark:text-purple-300">Active Power (P)</div>
+                      <div className="text-xl font-bold font-mono tabular-nums text-purple-700 dark:text-purple-300">
+                        {formatCleanNumber(ohmRes.powerW, 4)} W
+                      </div>
+                    </div>
+                  </div>
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono tabular-nums">
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Formula Applied</span>
+                      <span className="font-semibold">{ohmRes.formulaUsed}</span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Series Equivalent (R₁ + R₂)</span>
+                      <span className="font-semibold">{formatCleanNumber(ohmRes.seriesReq, 3)} Ω</span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Parallel Equivalent (R₁∥R₂)</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        {formatCleanNumber(ohmRes.parallelReq, 3)} Ω
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #36 DESCRIPTIVE STATISTICS & STANDARD DEVIATION
+    // ------------------------------------------------------------------------
+    if (id === 'extra-36-statistics-calc') {
+      const datasetText = String(toolState.datasetText || '');
+      const statRes = calculateDescriptiveStatistics(datasetText);
+
+      const summary = statRes.error
+        ? statRes.error
+        : `n = ${statRes.count} | Mean = ${formatCleanNumber(statRes.mean, 4)} | Median = ${formatCleanNumber(statRes.median, 4)} | Sample SD (s) = ${formatCleanNumber(statRes.sampleStdDev, 4)} | Pop SD (σ) = ${formatCleanNumber(statRes.populationStdDev, 4)} | IQR = ${formatCleanNumber(statRes.iqr, 4)}`;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Numeric Sample Dataset (Comma, Space, or Semicolon Separated)
+              </h3>
+              <textarea
+                rows={4}
+                value={datasetText}
+                onChange={(e) => updateState({ datasetText: e.target.value })}
+                placeholder="Enter numbers separated by commas or spaces..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono tabular-nums"
+              />
+              {!statRes.error && (
+                <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg text-[11px] font-mono text-slate-600 dark:text-slate-400">
+                  Sorted ({statRes.count} values): {statRes.sortedValues.join(', ')}
+                </div>
+              )}
+            </div>
+
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Distribution Metrics, Standard Deviation & Quartiles
+              </h3>
+              {statRes.error ? (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                  {statRes.error}
+                </div>
+              ) : (
+                <>
+                  <div className="grid grid-cols-3 gap-2.5">
+                    <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
+                      <div className="text-[11px] text-emerald-800 dark:text-emerald-300">Mean (x̄)</div>
+                      <div className="text-lg font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300">
+                        {formatCleanNumber(statRes.mean, 4)}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/70 rounded-lg">
+                      <div className="text-[11px] text-blue-800 dark:text-blue-300">Median</div>
+                      <div className="text-lg font-bold font-mono tabular-nums text-blue-700 dark:text-blue-300">
+                        {formatCleanNumber(statRes.median, 4)}
+                      </div>
+                    </div>
+                    <div className="p-3 bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/70 rounded-lg">
+                      <div className="text-[11px] text-amber-800 dark:text-amber-300">Sample SD (s)</div>
+                      <div className="text-lg font-bold font-mono tabular-nums text-amber-700 dark:text-amber-300">
+                        {formatCleanNumber(statRes.sampleStdDev, 4)}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono tabular-nums">
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Count (n) & Sum (Σx)</span>
+                      <span className="font-semibold">
+                        n = {statRes.count} · Σx = {formatCleanNumber(statRes.sum, 4)}
+                      </span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Population Std Dev (σ) & Variance (σ²)</span>
+                      <span className="font-semibold">
+                        σ = {formatCleanNumber(statRes.populationStdDev, 4)} · σ² = {formatCleanNumber(statRes.populationVariance, 4)}
+                      </span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Min / Max / Range</span>
+                      <span className="font-semibold">
+                        {statRes.min} / {statRes.max} (Range: {formatCleanNumber(statRes.range, 4)})
+                      </span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Quartiles (Q₁, Q₃) & IQR</span>
+                      <span className="font-semibold text-emerald-600 dark:text-emerald-400">
+                        Q₁ = {formatCleanNumber(statRes.q1, 3)} · Q₃ = {formatCleanNumber(statRes.q3, 3)} · IQR = {formatCleanNumber(statRes.iqr, 3)}
+                      </span>
+                    </div>
+                    <div className="py-1.5 flex justify-between">
+                      <span className="text-slate-500">Mode(s)</span>
+                      <span className="font-semibold">
+                        {statRes.modes.length > 0 ? statRes.modes.join(', ') : 'No repeating mode'}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #37 TYPOGRAPHY, REM/PX & DPI PRINT CONVERTER
+    // ------------------------------------------------------------------------
+    if (id === 'extra-37-typography-css') {
+      const value = numVal(toolState.value, 24);
+      const fromUnit: TypographyUnit = toolState.fromUnit || 'px';
+      const baseFontPx = numVal(toolState.baseFontPx, 16);
+      const dpi = numVal(toolState.dpi, 96);
+
+      const typoRes = convertTypographyAndCssUnits(value, fromUnit, baseFontPx, dpi);
+      const summary = `${value}${fromUnit} = ${formatCleanNumber(typoRes.px, 2)}px = ${formatCleanNumber(typoRes.rem, 4)}rem = ${formatCleanNumber(typoRes.pt, 2)}pt = ${formatCleanNumber(typoRes.mm, 2)}mm (@ ${baseFontPx}px root, ${dpi} DPI)`;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                CSS Typography & Print Resolution Parameters
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Input Value
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step="any"
+                    value={toolState.value}
+                    onChange={(e) => updateState({ value: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Source Unit
+                  </label>
+                  <select
+                    value={fromUnit}
+                    onChange={(e) => updateState({ fromUnit: e.target.value as TypographyUnit })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono"
+                  >
+                    <option value="px">Pixels (px)</option>
+                    <option value="rem">Root EM (rem)</option>
+                    <option value="em">Relative EM (em)</option>
+                    <option value="pt">Typographic Points (pt)</option>
+                    <option value="pc">Picas (pc)</option>
+                    <option value="mm">Millimeters (mm)</option>
+                    <option value="in">Inches (in)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Base Root Font Size (px)
+                  </label>
+                  <input
+                    type="number"
+                    min={8}
+                    max={64}
+                    value={toolState.baseFontPx}
+                    onChange={(e) => updateState({ baseFontPx: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Screen / Print Density (DPI)
+                  </label>
+                  <select
+                    value={dpi}
+                    onChange={(e) => updateState({ dpi: Number(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono"
+                  >
+                    <option value={72}>72 DPI (Legacy Screen / PostScript)</option>
+                    <option value={96}>96 DPI (W3C CSS Standard)</option>
+                    <option value={150}>150 DPI (Medium Print Proof)</option>
+                    <option value={300}>300 DPI (High-Res Offset Print)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="p-3 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg flex items-center justify-between gap-2 text-xs font-mono">
+                <span className="truncate text-emerald-700 dark:text-emerald-300">{typoRes.cssSnippet}</span>
+                <button
+                  type="button"
+                  onClick={() => handleCopyText(typoRes.cssSnippet)}
+                  className="px-2 py-1 text-[11px] bg-emerald-600 text-white rounded shrink-0"
+                >
+                  Copy CSS
+                </button>
+              </div>
+            </div>
+
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Equivalent Design & Print Units Matrix
+              </h3>
+              <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono tabular-nums">
+                {[
+                  { label: 'CSS Pixels (px)', val: `${formatCleanNumber(typoRes.px, 3)} px` },
+                  { label: `Root EM (rem @ ${baseFontPx}px)`, val: `${formatCleanNumber(typoRes.rem, 4)} rem` },
+                  { label: 'Typographic Points (pt)', val: `${formatCleanNumber(typoRes.pt, 3)} pt` },
+                  { label: 'Picas (pc)', val: `${formatCleanNumber(typoRes.pc, 3)} pc` },
+                  { label: `Millimeters (mm @ ${dpi} DPI)`, val: `${formatCleanNumber(typoRes.mm, 3)} mm` },
+                  { label: `Inches (in @ ${dpi} DPI)`, val: `${formatCleanNumber(typoRes.inches, 4)} in` },
+                ].map((row) => (
+                  <div key={row.label} className="py-2 flex items-center justify-between">
+                    <span className="text-slate-500">{row.label}</span>
+                    <span className="font-bold text-slate-900 dark:text-white">{row.val}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #38 DATA TRANSFER TIME & BANDWIDTH CALCULATOR
+    // ------------------------------------------------------------------------
+    if (id === 'extra-38-bandwidth-transfer') {
+      const fileSize = numVal(toolState.fileSize, 25);
+      const fileSizeUnit = (toolState.fileSizeUnit || 'GB') as 'MB' | 'GB' | 'TB' | 'GiB';
+      const bandwidthSpeed = numVal(toolState.bandwidthSpeed, 250);
+      const bandwidthUnit = (toolState.bandwidthUnit || 'Mbps') as 'Mbps' | 'Gbps' | 'MB/s';
+      const overheadPercent = numVal(toolState.overheadPercent, 5);
+
+      const bwRes = calculateBandwidthTransferTime(
+        fileSize,
+        fileSizeUnit,
+        bandwidthSpeed,
+        bandwidthUnit,
+        overheadPercent
+      );
+
+      const summary = bwRes.error
+        ? bwRes.error
+        : `Transfer ${fileSize} ${fileSizeUnit} @ ${bandwidthSpeed} ${bandwidthUnit} (${overheadPercent}% overhead) → Duration: ${bwRes.formattedDuration} (Effective: ${formatCleanNumber(bwRes.effectiveSpeedMbps, 2)} Mbps)`;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Payload Size & Network Link Speed
+              </h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    File / Payload Size
+                  </label>
+                  <input
+                    type="number"
+                    min={0.01}
+                    step="any"
+                    value={toolState.fileSize}
+                    onChange={(e) => updateState({ fileSize: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Payload Unit
+                  </label>
+                  <select
+                    value={fileSizeUnit}
+                    onChange={(e) => updateState({ fileSizeUnit: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono"
+                  >
+                    <option value="MB">Megabytes (MB · 10⁶ B)</option>
+                    <option value="GB">Gigabytes (GB · 10⁹ B)</option>
+                    <option value="GiB">Gibibytes (GiB · 2³⁰ B)</option>
+                    <option value="TB">Terabytes (TB · 10¹² B)</option>
+                  </select>
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Network Link Speed
+                  </label>
+                  <input
+                    type="number"
+                    min={0.1}
+                    step="any"
+                    value={toolState.bandwidthSpeed}
+                    onChange={(e) => updateState({ bandwidthSpeed: parseNumInput(e.target.value) })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-sm font-mono tabular-nums"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Bandwidth Unit
+                  </label>
+                  <select
+                    value={bandwidthUnit}
+                    onChange={(e) => updateState({ bandwidthUnit: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono"
+                  >
+                    <option value="Mbps">Megabits/sec (Mbps)</option>
+                    <option value="Gbps">Gigabits/sec (Gbps)</option>
+                    <option value="MB/s">Megabytes/sec (MB/s)</option>
+                  </select>
+                </div>
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                  TCP/IP & TLS Protocol Overhead (%): {overheadPercent}%
+                </label>
+                <input
+                  type="range"
+                  min={0}
+                  max={25}
+                  step={1}
+                  value={overheadPercent}
+                  onChange={(e) => updateState({ overheadPercent: Number(e.target.value) })}
+                  className="w-full accent-emerald-600"
+                />
+              </div>
+            </div>
+
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Estimated Transfer Duration & Benchmark Links
+              </h3>
+              {bwRes.error ? (
+                <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                  {bwRes.error}
+                </div>
+              ) : (
+                <>
+                  <div className="p-4 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
+                    <div className="text-xs text-emerald-800 dark:text-emerald-300">
+                      Estimated Transfer Time ({overheadPercent}% overhead)
+                    </div>
+                    <div className="text-2xl font-bold font-mono tabular-nums text-emerald-700 dark:text-emerald-300 mt-1">
+                      {bwRes.formattedDuration}
+                    </div>
+                    <div className="text-[11px] font-mono text-emerald-700/80 dark:text-emerald-400/80 mt-0.5">
+                      Effective Throughput: {formatCleanNumber(bwRes.effectiveSpeedMbps, 2)} Mbps ({formatCleanNumber(bwRes.effectiveBytesPerSec / 1e6, 2)} MB/s)
+                    </div>
+                  </div>
+
+                  <div className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-mono tabular-nums">
+                    {bwRes.speedComparisonTable.map((row) => (
+                      <div key={row.label} className="py-1.5 flex justify-between">
+                        <span className="text-slate-500">{row.label}</span>
+                        <span className="font-semibold">{row.formattedTime}</span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
     // #32 ONE-REP MAX (1RM) STRENGTH CALCULATOR (With Brzycki r >= 37 Guard)
     // ------------------------------------------------------------------------
     const weight = numVal(toolState.weight, 100);
@@ -3883,35 +4952,71 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
   // Everyday Quick Preset Chips for active tool
   const quickPresetButtons = useMemo(() => {
     const id = activeTool.id;
-    if (id === 'extra-2-discount-gst') {
+    if (id === 'extra-7-discount-tax') {
       return [
-        { label: '5% GST', patch: { taxPct: 5 } },
-        { label: '12% GST', patch: { taxPct: 12 } },
+        { label: '5% Tax', patch: { taxPct: 5 } },
+        { label: '8.5% Sales Tax', patch: { taxPct: 8.5 } },
         { label: '18% GST', patch: { taxPct: 18 } },
-        { label: '28% GST', patch: { taxPct: 28 } },
-        { label: '10% Discount', patch: { discountPct: 10 } },
-        { label: '25% Discount', patch: { discountPct: 25 } },
-        { label: '50% Discount', patch: { discountPct: 50 } },
+        { label: '10% Discount', patch: { discountType: 'percent', discountValue: 10 } },
+        { label: '25% Discount', patch: { discountType: 'percent', discountValue: 25 } },
+        { label: '50% Discount', patch: { discountType: 'percent', discountValue: 50 } },
       ];
     }
-    if (id === 'extra-3-tip-split') {
+    if (id === 'extra-8-tip-split') {
       return [
         { label: '10% Tip', patch: { tipPct: 10 } },
         { label: '15% Tip', patch: { tipPct: 15 } },
         { label: '18% Tip', patch: { tipPct: 18 } },
         { label: '20% Tip', patch: { tipPct: 20 } },
-        { label: '25% Tip', patch: { tipPct: 25 } },
         { label: 'Split 2 Ways', patch: { people: 2 } },
         { label: 'Split 4 Ways', patch: { people: 4 } },
       ];
     }
-    if (id === 'extra-8-ratio-proportion') {
+    if (id === 'extra-12-base-ratio') {
       return [
-        { label: '1920×1080 (16:9 FHD)', patch: { a: 1920, b: 1080 } },
-        { label: '3840×2160 (4K UHD)', patch: { a: 3840, b: 2160 } },
-        { label: '2560×1440 (QHD)', patch: { a: 2560, b: 1440 } },
-        { label: '1080×1350 (4:5 Social)', patch: { a: 1080, b: 1350 } },
-        { label: '1080×1920 (9:16 Story)', patch: { a: 1080, b: 1920 } },
+        { label: '1920×1080 (16:9 FHD)', patch: { ratioA: 1920, ratioB: 1080 } },
+        { label: '3840×2160 (4K UHD)', patch: { ratioA: 3840, ratioB: 2160 } },
+        { label: '1080×1350 (4:5 Social)', patch: { ratioA: 1080, ratioB: 1350 } },
+        { label: '1080×1920 (9:16 Story)', patch: { ratioA: 1080, ratioB: 1920 } },
+      ];
+    }
+    if (id === 'extra-33-loan-emi') {
+      return [
+        { label: '30Y Home Mortgage ($400k @ 6.5%)', patch: { principalAmount: 400000, annualRatePercent: 6.5, tenureYears: 30, extraMonthlyPayment: 0 } },
+        { label: '15Y Refinance ($300k @ 5.75%)', patch: { principalAmount: 300000, annualRatePercent: 5.75, tenureYears: 15, extraMonthlyPayment: 250 } },
+        { label: '5Y Auto Loan ($35k @ 7.2%)', patch: { principalAmount: 35000, annualRatePercent: 7.2, tenureYears: 5, extraMonthlyPayment: 0 } },
+      ];
+    }
+    if (id === 'extra-34-roi-margin') {
+      return [
+        { label: 'SaaS Product ($15 cost / $79 price)', patch: { unitCost: 15, sellingPrice: 79, unitsSold: 400, fixedOverheadCost: 8500 } },
+        { label: 'Retail E-Commerce ($28 cost / $65 price)', patch: { unitCost: 28, sellingPrice: 65, unitsSold: 1000, fixedOverheadCost: 15000 } },
+      ];
+    }
+    if (id === 'extra-35-ohms-law') {
+      return [
+        { label: '12V Automotive (12V, 5A)', patch: { solveMode: 'from-v-i', inputA: 12, inputB: 5 } },
+        { label: 'USB-C PD 100W (100W, 20V)', patch: { solveMode: 'from-p-v', inputA: 100, inputB: 20 } },
+        { label: '230V Mains Heater (230V, 23Ω)', patch: { solveMode: 'from-v-r', inputA: 230, inputB: 23 } },
+      ];
+    }
+    if (id === 'extra-36-statistics-calc') {
+      return [
+        { label: 'Exam Scores Sample', patch: { datasetText: '68, 74, 79, 82, 85, 85, 88, 91, 94, 98' } },
+        { label: 'Server Latency (ms)', patch: { datasetText: '11.4, 12.1, 12.8, 13.2, 14.0, 15.6, 18.9, 24.5' } },
+      ];
+    }
+    if (id === 'extra-37-typography-css') {
+      return [
+        { label: '16px Body (1rem)', patch: { value: 16, fromUnit: 'px', baseFontPx: 16 } },
+        { label: '24px Heading (1.5rem)', patch: { value: 24, fromUnit: 'px', baseFontPx: 16 } },
+        { label: '12pt Print @ 300 DPI', patch: { value: 12, fromUnit: 'pt', dpi: 300 } },
+      ];
+    }
+    if (id === 'extra-38-bandwidth-transfer') {
+      return [
+        { label: '50 GB Game @ 500 Mbps Fiber', patch: { fileSize: 50, fileSizeUnit: 'GB', bandwidthSpeed: 500, bandwidthUnit: 'Mbps' } },
+        { label: '1 TB Backup @ 1 Gbps Link', patch: { fileSize: 1, fileSizeUnit: 'TB', bandwidthSpeed: 1, bandwidthUnit: 'Gbps' } },
       ];
     }
     if (UNIT_CONVERTER_CONFIGS[id]) {

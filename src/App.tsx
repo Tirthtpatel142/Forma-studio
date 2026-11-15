@@ -38,6 +38,7 @@ import {
   Keyboard,
   Archive,
   BookmarkCheck,
+  Copy,
 } from 'lucide-react';
 import {
   PDF_CATEGORIES,
@@ -87,6 +88,7 @@ import {
   SavedPipelinePreset,
   CalcHistoryEntry,
 } from './utils/userStorage';
+import { StudioErrorBoundary } from './components/StudioErrorBoundary';
 
 type ActiveSection = 'pdf' | 'image' | 'extra' | 'pipelines' | 'system';
 
@@ -136,6 +138,7 @@ const DIRECT_INPUT_PDF_TOOL_IDS = new Set([
   'pdf-28-url-to-pdf',
   'pdf-29-markdown-to-pdf',
   'pdf-30-text-to-pdf',
+  'pdf-66-invoice-generator',
 ]);
 
 const STANDALONE_IMAGE_TOOL_IDS = new Set([
@@ -155,12 +158,13 @@ export const BEFORE_AFTER_COMPARE_TOOL_IDS = new Set([
   'img-27-dehaze',
   // Dedicated Compare Tool (#42)
   'img-42-compare-slider',
-  // Filters & Effects (#45–#49)
+  // Filters & Effects (#45–#49, #52)
   'img-45-blur-tools',
   'img-46-pixelation',
   'img-47-artistic',
   'img-48-color-correction',
   'img-49-glitch-distortion',
+  'img-52-duotone-studio',
 ]);
 
 function dataUrlToUint8Array(dataUrl: string): Uint8Array {
@@ -264,7 +268,7 @@ function FormaStudioWorkspace() {
     Record<string, { pdf?: PdfExecutionResult; image?: ImageExecutionResult }>
   >({});
   const [zipEntriesByToolId, setZipEntriesByToolId] = useState<
-    Record<string, { name: string; sizeBytes: number }[]>
+    Record<string, { name: string; sizeBytes: number; bytes: Uint8Array }[]>
   >({});
 
   // Dedicated Stamp Image store for PDF Tool #42 (Add Image / Logo to PDF)
@@ -294,6 +298,7 @@ function FormaStudioWorkspace() {
   const [imageStageZoom, setImageStageZoom] = useState<'fit' | 100 | 200>('fit');
   const [isDragOverUpload, setIsDragOverUpload] = useState<boolean>(false);
   const [showDirectoryPinnedOnly, setShowDirectoryPinnedOnly] = useState<boolean>(false);
+  const [directorySearchQuery, setDirectorySearchQuery] = useState<string>('');
   const [isUserMenuOpen, setIsUserMenuOpen] = useState<boolean>(false);
   const [isShortcutsOpen, setIsShortcutsOpen] = useState<boolean>(false);
   const [toasts, setToasts] = useState<
@@ -433,23 +438,28 @@ function FormaStudioWorkspace() {
     calcHistoryByToolId,
   ]);
 
-  // Persist user workspace snapshot strictly under user.uid
+  // Persist user workspace snapshot strictly under user.uid (debounced by 350ms to avoid main-thread stalls)
   useEffect(() => {
     if (!user?.uid || hydratedUid !== user.uid || hydratedUidRef.current !== user.uid) return;
-    saveUserWorkspaceSnapshot(user.uid, {
-      filesByToolId,
-      selectedIdsByToolId,
-      activeFileIdByToolId,
-      resultByToolId,
-      stampImages,
-      selectedStampImageId,
-      importedHistory,
-      completedOutputs,
-      auditLogs,
-      pipelineFiles,
-      pipelineSummary,
-      pipelineLastResult,
-    });
+    const uid = user.uid;
+    const timer = window.setTimeout(() => {
+      if (hydratedUidRef.current !== uid) return;
+      saveUserWorkspaceSnapshot(uid, {
+        filesByToolId,
+        selectedIdsByToolId,
+        activeFileIdByToolId,
+        resultByToolId,
+        stampImages,
+        selectedStampImageId,
+        importedHistory,
+        completedOutputs,
+        auditLogs,
+        pipelineFiles,
+        pipelineSummary,
+        pipelineLastResult,
+      });
+    }, 350);
+    return () => window.clearTimeout(timer);
   }, [
     user?.uid,
     hydratedUid,
@@ -1280,11 +1290,11 @@ function FormaStudioWorkspace() {
         if (res.fileName.toLowerCase().endsWith('.zip') || res.mimeType.includes('zip')) {
           try {
             const loadedZip = await JSZip.loadAsync(res.outputBytes);
-            const entries: { name: string; sizeBytes: number }[] = [];
+            const entries: { name: string; sizeBytes: number; bytes: Uint8Array }[] = [];
             for (const [entryName, zipObj] of Object.entries(loadedZip.files)) {
               if (!zipObj.dir) {
                 const raw = await zipObj.async('uint8array');
-                entries.push({ name: entryName, sizeBytes: raw.byteLength });
+                entries.push({ name: entryName, sizeBytes: raw.byteLength, bytes: raw });
               }
             }
             setZipEntriesByToolId((prev) => ({ ...prev, [tid]: entries }));
@@ -1386,11 +1396,11 @@ function FormaStudioWorkspace() {
         if (res.fileName.toLowerCase().endsWith('.zip') || res.mimeType.includes('zip')) {
           try {
             const loadedZip = await JSZip.loadAsync(res.outputBytes);
-            const entries: { name: string; sizeBytes: number }[] = [];
+            const entries: { name: string; sizeBytes: number; bytes: Uint8Array }[] = [];
             for (const [entryName, zipObj] of Object.entries(loadedZip.files)) {
               if (!zipObj.dir) {
                 const raw = await zipObj.async('uint8array');
-                entries.push({ name: entryName, sizeBytes: raw.byteLength });
+                entries.push({ name: entryName, sizeBytes: raw.byteLength, bytes: raw });
               }
             }
             setZipEntriesByToolId((prev) => ({ ...prev, [tid]: entries }));
@@ -2531,20 +2541,31 @@ function FormaStudioWorkspace() {
                     <div className="text-xs text-slate-500 dark:text-slate-400">
                       Complete Tool Catalog ·{' '}
                       {activeSection === 'pdf'
-                        ? '60 PDF Studio Tools'
+                        ? '66 PDF Studio Tools'
                         : activeSection === 'image'
-                        ? '49+ Image Studio Tools & 312 LUT Presets'
-                        : '32 Offline Calculators, 2D Grapher & Engineering Unit Converters'}
+                        ? '55 Image Studio Tools & 312 LUT Presets'
+                        : '38 Offline Calculators, 2D Grapher & Engineering Unit Converters'}
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-0.5">
                       {activeSection === 'pdf'
-                        ? 'PDF Studio — Complete 60-Tool Architecture'
+                        ? 'PDF Studio — Complete 66-Tool Architecture'
                         : activeSection === 'image'
-                        ? 'Image Studio — Complete 49-Tool & 312-Filter Architecture'
-                        : 'Calculator and Converter Studio — 32 Calculators, Graphing & Unit Converters'}
+                        ? 'Image Studio — Complete 55-Tool & 312-Filter Architecture'
+                        : 'Calculator and Converter Studio — 38 Calculators, Graphing & Unit Converters'}
                     </h1>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={directorySearchQuery}
+                        onChange={(e) => setDirectorySearchQuery(e.target.value)}
+                        placeholder="Search tools in directory..."
+                        aria-label="Search tools in directory"
+                        className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg pl-8 pr-3 py-1.5 text-xs text-slate-900 dark:text-slate-100 placeholder-slate-400 w-48 sm:w-56"
+                      />
+                    </div>
                     <button
                       type="button"
                       onClick={() => setShowDirectoryPinnedOnly((p) => !p)}
@@ -2581,10 +2602,15 @@ function FormaStudioWorkspace() {
                 </div>
 
                 {activeStudioCategories.map((cat) => {
+                  const dq = directorySearchQuery.trim().toLowerCase();
                   const catTools = activeStudioTools.filter(
                     (t) =>
                       t.categoryId === cat.id &&
-                      (!showDirectoryPinnedOnly || pinnedToolIds.includes(t.id))
+                      (!showDirectoryPinnedOnly || pinnedToolIds.includes(t.id)) &&
+                      (!dq ||
+                        t.name.toLowerCase().includes(dq) ||
+                        t.shortDesc.toLowerCase().includes(dq) ||
+                        String(t.number) === dq)
                   );
                   if (catTools.length === 0) return null;
                   return (
@@ -2687,44 +2713,50 @@ function FormaStudioWorkspace() {
                 </div>
 
                 <div className="flex-1 overflow-y-auto min-w-0">
-                  <ExtraToolsWorkbench
-                    activeTool={activeTool}
-                    isDark={isDark}
-                    calcHistoryForTool={calcHistoryByToolId[activeTool.id] || []}
-                    onSaveCalcHistoryEntry={(
-                      summaryLabel: string,
-                      resultValue: string,
-                      stateSnapshot: Record<string, any>
-                    ) => {
-                      const entry: CalcHistoryEntry = {
-                        id: `calc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                        toolId: activeTool.id,
-                        toolName: activeTool.name,
-                        timestamp: new Date().toTimeString().slice(0, 8),
-                        summaryLabel,
-                        resultValue,
-                        stateSnapshot,
-                      };
-                      setCalcHistoryByToolId((prev) => ({
-                        ...prev,
-                        [activeTool.id]: [entry, ...(prev[activeTool.id] || []).slice(0, 19)],
-                      }));
-                      pushToast('Saved calculation to history', 'success');
-                    }}
-                    onClearCalcHistoryForTool={() => {
-                      setCalcHistoryByToolId((prev) => ({
-                        ...prev,
-                        [activeTool.id]: [],
-                      }));
-                      pushToast('Cleared tool calculation history', 'info');
-                    }}
-                    onNotify={(msg) => pushToast(msg, 'info')}
-                  />
+                  <StudioErrorBoundary
+                    toolName={activeTool.name}
+                    onResetTool={handleClearToolFiles}
+                  >
+                    <ExtraToolsWorkbench
+                      activeTool={activeTool}
+                      isDark={isDark}
+                      calcHistoryForTool={calcHistoryByToolId[activeTool.id] || []}
+                      onSaveCalcHistoryEntry={(
+                        summaryLabel: string,
+                        resultValue: string,
+                        stateSnapshot: Record<string, any>
+                      ) => {
+                        const entry: CalcHistoryEntry = {
+                          id: `calc-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                          toolId: activeTool.id,
+                          toolName: activeTool.name,
+                          timestamp: new Date().toTimeString().slice(0, 8),
+                          summaryLabel,
+                          resultValue,
+                          stateSnapshot,
+                        };
+                        setCalcHistoryByToolId((prev) => ({
+                          ...prev,
+                          [activeTool.id]: [entry, ...(prev[activeTool.id] || []).slice(0, 19)],
+                        }));
+                        pushToast('Saved calculation to history', 'success');
+                      }}
+                      onClearCalcHistoryForTool={() => {
+                        setCalcHistoryByToolId((prev) => ({
+                          ...prev,
+                          [activeTool.id]: [],
+                        }));
+                        pushToast('Cleared tool calculation history', 'info');
+                      }}
+                      onNotify={(msg) => pushToast(msg, 'info')}
+                    />
+                  </StudioErrorBoundary>
                 </div>
               </div>
             ) : (
               /* Workbench: Desktop 2-column grid (Center + Right Inspector), Mobile ordered (Upload -> Params/Run -> Preview/Output) */
-              <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_330px] min-w-0">
+              <StudioErrorBoundary toolName={activeTool.name} onResetTool={handleClearToolFiles}>
+                <div className="flex-1 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_330px] min-w-0">
                 {/* Mobile Tool Header Switcher Bar (< 1024px) */}
                 <div className="lg:hidden px-4 py-3 bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
                   <div className="min-w-0">
@@ -2774,6 +2806,13 @@ function FormaStudioWorkspace() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
+                      <span className="px-2 py-0.5 text-[11px] font-mono rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700">
+                        {isDirectPdfTool || isStandaloneImgTool
+                          ? 'Standalone Generator'
+                          : isMultiFileTool
+                          ? 'Multi-File Queue'
+                          : 'Single-File Tool'}
+                      </span>
                       <span className="text-xs text-slate-500 dark:text-slate-400 font-mono tabular-nums">
                         Engine: {activeTool.engineLabel}
                       </span>
@@ -3021,6 +3060,17 @@ function FormaStudioWorkspace() {
                       <div className="flex items-center gap-1 shrink-0">
                         <button
                           type="button"
+                          onClick={handleRunActiveTool}
+                          disabled={isProcessing}
+                          className={`lg:hidden px-2.5 py-1 text-[10px] font-mono font-bold text-white rounded flex items-center gap-1 ${
+                            activeSection === 'pdf' ? 'bg-blue-600' : 'bg-indigo-600'
+                          } disabled:opacity-50`}
+                        >
+                          <Play className="w-2.5 h-2.5" />
+                          <span>Run</span>
+                        </button>
+                        <button
+                          type="button"
                           onClick={() => {
                             setSavedToolParamPresets((prev) => ({
                               ...prev,
@@ -3054,13 +3104,13 @@ function FormaStudioWorkspace() {
                       </div>
                     </div>
 
-                    {/* PDF Quick Page Range Presets (#2 Split, #4 Remove Pages, #6 Rotate, #8 Extract Pages) */}
+                    {/* PDF Quick Page Range Presets + Interactive Clickable Page Pills (#2 Split, #4 Remove Pages, #6 Rotate, #8 Extract Pages) */}
                     {activeSection === 'pdf' &&
                       (activeTool.id === 'pdf-2-split' ||
                         activeTool.id === 'pdf-4-remove-pages' ||
                         activeTool.id === 'pdf-6-rotate' ||
                         activeTool.id === 'pdf-8-extract-pages') && (
-                        <div className="p-2.5 bg-blue-50/60 dark:bg-blue-950/25 border border-blue-200/70 dark:border-blue-900/50 rounded-lg space-y-1.5">
+                        <div className="p-2.5 bg-blue-50/60 dark:bg-blue-950/25 border border-blue-200/70 dark:border-blue-900/50 rounded-lg space-y-2">
                           <div className="text-[10px] font-mono uppercase tracking-wider text-blue-700 dark:text-blue-300 font-semibold">
                             Quick Page Selection Presets:
                           </div>
@@ -3098,6 +3148,57 @@ function FormaStudioWorkspace() {
                               );
                             })}
                           </div>
+
+                          {/* Interactive Page Number Pills when a PDF is uploaded */}
+                          {toolActiveFile?.pageCount && toolActiveFile.pageCount > 1 && (
+                            <div className="pt-1.5 border-t border-blue-200/60 dark:border-blue-900/50 space-y-1">
+                              <div className="text-[10px] font-mono text-slate-500 dark:text-slate-400">
+                                Click page numbers to toggle ({toolActiveFile.pageCount} pages):
+                              </div>
+                              <div className="flex flex-wrap gap-1 max-h-20 overflow-y-auto">
+                                {Array.from({
+                                  length: Math.min(24, toolActiveFile.pageCount),
+                                }).map((_, idx) => {
+                                  const pNum = String(idx + 1);
+                                  const targetKey =
+                                    activeTool.params.find(
+                                      (p) =>
+                                        p.key.toLowerCase().includes('page') ||
+                                        p.key.toLowerCase().includes('range')
+                                    )?.key || activeTool.params[0]?.key;
+                                  const curRaw = String((targetKey && toolParams[targetKey]) || '');
+                                  const tokens = curRaw
+                                    .split(',')
+                                    .map((s) => s.trim())
+                                    .filter(Boolean);
+                                  const isSelectedPage = tokens.includes(pNum);
+                                  return (
+                                    <button
+                                      key={pNum}
+                                      type="button"
+                                      onClick={() => {
+                                        if (!targetKey) return;
+                                        const nextTokens = isSelectedPage
+                                          ? tokens.filter((t) => t !== pNum)
+                                          : [...tokens.filter((t) => !t.includes('-') && t !== 'odd' && t !== 'even'), pNum];
+                                        updateActiveToolParam(
+                                          targetKey,
+                                          nextTokens.length > 0 ? nextTokens.join(', ') : '1'
+                                        );
+                                      }}
+                                      className={`px-1.5 py-0.5 text-[10px] font-mono rounded border ${
+                                        isSelectedPage
+                                          ? 'bg-blue-600 text-white border-blue-600'
+                                          : 'bg-white dark:bg-slate-900 text-slate-600 dark:text-slate-300 border-slate-200 dark:border-slate-800'
+                                      }`}
+                                    >
+                                      p.{pNum}
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
                         </div>
                       )}
 
@@ -3141,6 +3242,102 @@ function FormaStudioWorkspace() {
                           </div>
                         </div>
                       )}
+
+                    {/* Standalone PDF Invoice Quick Templates (#66) */}
+                    {activeTool.id === 'pdf-66-invoice-generator' && (
+                      <div className="p-2.5 bg-blue-50/60 dark:bg-blue-950/25 border border-blue-200/70 dark:border-blue-900/50 rounded-lg space-y-1.5">
+                        <div className="text-[10px] font-mono uppercase tracking-wider text-blue-700 dark:text-blue-300 font-semibold">
+                          Quick Invoice Templates:
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            {
+                              label: 'SaaS Enterprise License',
+                              invoiceNumber: 'INV-2026-0842',
+                              vendorName: 'Forma Studio Engineering LLC',
+                              clientName: 'Acme Global Enterprises Inc.',
+                              lineItemsText:
+                                'Enterprise PDF & Image Suite License | 1 | 1450.00\nCustom Pipeline Integration & Setup | 12 | 125.00\nPriority Engineering Support (Annual) | 1 | 600.00',
+                              taxPercent: 8.5,
+                            },
+                            {
+                              label: 'Design Agency Retainer',
+                              invoiceNumber: 'INV-2026-1094',
+                              vendorName: 'Nordic Creative Studio Ltd.',
+                              clientName: 'Vanguard Retail Group',
+                              lineItemsText:
+                                'Brand Identity & Print Guidelines | 1 | 3200.00\nSocial Media Multi-Size Asset Kit | 4 | 450.00\nUI/UX Design Sprint (40 hrs) | 40 | 95.00',
+                              taxPercent: 0,
+                            },
+                            {
+                              label: 'Legal & Compliance Filing',
+                              invoiceNumber: 'INV-2026-0318',
+                              vendorName: 'Apex Legal Discovery Partners',
+                              clientName: 'Meridian Holdings Corp.',
+                              lineItemsText:
+                                'Bates Stamping & Exhibit Indexing | 1 | 850.00\nPII Redaction & PDF/A Archival | 1 | 1200.00',
+                              taxPercent: 6.0,
+                            },
+                          ].map((tpl) => (
+                            <button
+                              key={tpl.label}
+                              type="button"
+                              onClick={() => {
+                                setParamsByToolId((prev) => ({
+                                  ...prev,
+                                  [activeTool.id]: {
+                                    ...(prev[activeTool.id] || buildDefaultParams(activeTool)),
+                                    invoiceNumber: tpl.invoiceNumber,
+                                    vendorName: tpl.vendorName,
+                                    clientName: tpl.clientName,
+                                    lineItemsText: tpl.lineItemsText,
+                                    taxPercent: tpl.taxPercent,
+                                  },
+                                }));
+                              }}
+                              className="px-2 py-0.5 text-[11px] font-mono bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-800 hover:border-blue-500 rounded text-blue-700 dark:text-blue-300"
+                            >
+                              {tpl.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Duotone Studio Palette Presets (#52) */}
+                    {activeTool.id === 'img-52-duotone-studio' && (
+                      <div className="p-2.5 bg-indigo-50/60 dark:bg-indigo-950/25 border border-indigo-200/70 dark:border-indigo-900/50 rounded-lg space-y-1.5">
+                        <div className="text-[10px] font-mono uppercase tracking-wider text-indigo-700 dark:text-indigo-300 font-semibold">
+                          Quick Duotone Color Palettes:
+                        </div>
+                        <div className="flex flex-wrap gap-1.5">
+                          {[
+                            { label: 'Cyber Indigo / Sky', shadow: '#1E1B4B', highlight: '#38BDF8' },
+                            { label: 'Spotify Emerald / Obsidian', shadow: '#064E3B', highlight: '#34D399' },
+                            { label: 'Sunset Crimson / Gold', shadow: '#4C0519', highlight: '#FBBF24' },
+                            { label: 'Archival Cyanotype', shadow: '#0C4A6E', highlight: '#E0F2FE' },
+                          ].map((pal) => (
+                            <button
+                              key={pal.label}
+                              type="button"
+                              onClick={() => {
+                                setParamsByToolId((prev) => ({
+                                  ...prev,
+                                  [activeTool.id]: {
+                                    ...(prev[activeTool.id] || buildDefaultParams(activeTool)),
+                                    shadowColor: pal.shadow,
+                                    highlightColor: pal.highlight,
+                                  },
+                                }));
+                              }}
+                              className="px-2 py-0.5 text-[11px] font-mono bg-white dark:bg-slate-900 border border-indigo-200 dark:border-indigo-800 hover:border-indigo-500 rounded text-indigo-700 dark:text-indigo-300"
+                            >
+                              {pal.label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
 
                     <div className="space-y-4">
                       {activeTool.params.map((param) => {
@@ -3216,6 +3413,17 @@ function FormaStudioWorkspace() {
                                 placeholder={param.placeholder}
                                 onChange={(e) => updateActiveToolParam(param.key, e.target.value)}
                                 className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs text-slate-900 dark:text-slate-100"
+                              />
+                            )}
+
+                            {param.type === 'textarea' && (
+                              <textarea
+                                id={inputId}
+                                rows={4}
+                                value={String(val)}
+                                placeholder={param.placeholder}
+                                onChange={(e) => updateActiveToolParam(param.key, e.target.value)}
+                                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-3 py-2 text-xs font-mono text-slate-900 dark:text-slate-100"
                               />
                             )}
 
@@ -3429,10 +3637,26 @@ function FormaStudioWorkspace() {
 
                         {(toolPdfResult?.previewText || toolActiveFile?.text) && (
                           <div className="p-3.5 bg-slate-900 text-slate-100 rounded-lg font-mono text-xs max-h-40 overflow-y-auto whitespace-pre-wrap border border-slate-800">
-                            <div className="text-[10px] uppercase tracking-wider text-blue-400 mb-1">
-                              {toolPdfResult?.previewText
-                                ? `Tool Execution Output / Extracted Stream (${toolPdfResult.fileName})`
-                                : `Extracted Document Text Preview (${toolActiveFile?.name})`}
+                            <div className="flex items-center justify-between gap-2 mb-1.5">
+                              <div className="text-[10px] uppercase tracking-wider text-blue-400">
+                                {toolPdfResult?.previewText
+                                  ? `Tool Execution Output / Extracted Stream (${toolPdfResult.fileName})`
+                                  : `Extracted Document Text Preview (${toolActiveFile?.name})`}
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const txt = toolPdfResult?.previewText || toolActiveFile?.text || '';
+                                  if (txt && navigator.clipboard) {
+                                    navigator.clipboard.writeText(txt).catch(() => {});
+                                    pushToast('Copied extracted text to clipboard', 'success');
+                                  }
+                                }}
+                                className="px-2 py-0.5 text-[10px] font-mono bg-slate-800 hover:bg-blue-600 text-slate-200 rounded flex items-center gap-1 shrink-0"
+                              >
+                                <Copy className="w-3 h-3" />
+                                <span>Copy Text</span>
+                              </button>
                             </div>
                             {toolPdfResult?.previewText || toolActiveFile?.text}
                           </div>
@@ -3542,6 +3766,39 @@ function FormaStudioWorkspace() {
                                     : activeTool.name}
                                 </span>
                               </div>
+
+                              {/* Interactive Click-to-Copy HEX Color Swatches for #39 Eyedropper & #40 Palette Generator */}
+                              {(Array.isArray(toolImageResult.extraMeta?.swatches) ||
+                                typeof toolImageResult.extraMeta?.hex === 'string') && (
+                                <div className="w-full max-w-xl p-3 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-lg space-y-2">
+                                  <div className="text-[10px] font-mono uppercase tracking-wider text-indigo-600 dark:text-indigo-400 font-bold">
+                                    Interactive Color Swatches (Click any swatch to copy HEX):
+                                  </div>
+                                  <div className="flex flex-wrap gap-2">
+                                    {(Array.isArray(toolImageResult.extraMeta?.swatches)
+                                      ? (toolImageResult.extraMeta.swatches as string[])
+                                      : [String(toolImageResult.extraMeta?.hex)]
+                                    ).map((hexVal) => (
+                                      <button
+                                        key={hexVal}
+                                        type="button"
+                                        onClick={() => {
+                                          navigator.clipboard?.writeText(hexVal).catch(() => {});
+                                          pushToast(`Copied ${hexVal} to clipboard`, 'success');
+                                        }}
+                                        className="px-2.5 py-1.5 rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-950 hover:border-indigo-500 flex items-center gap-2 text-xs font-mono"
+                                      >
+                                        <span
+                                          className="w-4 h-4 rounded border border-slate-300 dark:border-slate-700 shrink-0"
+                                          style={{ backgroundColor: hexVal }}
+                                        />
+                                        <span>{hexVal}</span>
+                                        <Copy className="w-3 h-3 text-slate-400" />
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
 
                               {/* Structured JSON / Metadata / Archive Inspector for .json, .enc, .zip, .pdf outputs */}
                               {(toolImageResult.fileName.endsWith('.json') ||
@@ -3769,6 +4026,40 @@ function FormaStudioWorkspace() {
                               <span>Use Output as Input</span>
                             </button>
                           )}
+                          {activeSection === 'image' &&
+                            toolImageResult?.mimeType.startsWith('image/') && (
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  try {
+                                    const blob = new Blob(
+                                      [toolImageResult.outputBytes as unknown as BlobPart],
+                                      { type: 'image/png' }
+                                    );
+                                    if (
+                                      navigator.clipboard &&
+                                      typeof ClipboardItem !== 'undefined'
+                                    ) {
+                                      await navigator.clipboard.write([
+                                        new ClipboardItem({ 'image/png': blob }),
+                                      ]);
+                                      pushToast('Copied image to clipboard', 'success');
+                                    } else {
+                                      await navigator.clipboard.writeText(
+                                        toolImageResult.outputDataUrl
+                                      );
+                                      pushToast('Copied image data URL to clipboard', 'success');
+                                    }
+                                  } catch {
+                                    pushToast('Clipboard copy not supported in this context', 'info');
+                                  }
+                                }}
+                                className="px-3 py-2 text-xs font-semibold text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 border border-emerald-300 dark:border-emerald-700 hover:border-indigo-500 rounded-lg flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
+                              >
+                                <Copy className="w-3.5 h-3.5 text-indigo-600 dark:text-indigo-400" />
+                                <span>Copy Image</span>
+                              </button>
+                            )}
                           {activeSection === 'pdf' &&
                             toolPdfResult?.mimeType === 'application/pdf' && (
                               <button
@@ -3797,7 +4088,7 @@ function FormaStudioWorkspace() {
                         </div>
                       </div>
 
-                      {/* Batch ZIP File Inspector Table (for .zip outputs from Batch Resize, Batch Crop, Split, Extract Images, etc.) */}
+                      {/* Batch ZIP File Inspector Table with Individual Entry Preview & Download */}
                       {toolZipEntries.length > 0 && (
                         <div className="pt-2.5 border-t border-emerald-200/80 dark:border-emerald-900/60 space-y-1.5">
                           <div className="flex items-center justify-between text-[11px] font-mono text-emerald-900 dark:text-emerald-200 font-semibold">
@@ -3815,18 +4106,70 @@ function FormaStudioWorkspace() {
                               KB
                             </span>
                           </div>
-                          <div className="max-h-36 overflow-y-auto bg-white/90 dark:bg-slate-900/90 border border-emerald-200 dark:border-emerald-800/70 rounded-lg divide-y divide-slate-100 dark:divide-slate-800/60 text-xs font-mono">
-                            {toolZipEntries.map((entry) => (
-                              <div
-                                key={entry.name}
-                                className="px-3 py-1.5 flex items-center justify-between gap-2 text-slate-700 dark:text-slate-200"
-                              >
-                                <span className="truncate">{entry.name}</span>
-                                <span className="text-[11px] text-slate-400 tabular-nums shrink-0">
-                                  {(entry.sizeBytes / 1024).toFixed(1)} KB
-                                </span>
-                              </div>
-                            ))}
+                          <div className="max-h-40 overflow-y-auto bg-white/90 dark:bg-slate-900/90 border border-emerald-200 dark:border-emerald-800/70 rounded-lg divide-y divide-slate-100 dark:divide-slate-800/60 text-xs font-mono">
+                            {toolZipEntries.map((entry) => {
+                              const lower = entry.name.toLowerCase();
+                              const isPdfEntry = lower.endsWith('.pdf');
+                              const isImgEntry = /\.(png|jpe?g|webp|gif|bmp|svg)$/i.test(lower);
+                              const entryMime = isPdfEntry
+                                ? 'application/pdf'
+                                : isImgEntry
+                                ? `image/${lower.endsWith('.jpg') ? 'jpeg' : lower.split('.').pop()}`
+                                : 'application/octet-stream';
+                              return (
+                                <div
+                                  key={entry.name}
+                                  className="px-3 py-1.5 flex items-center justify-between gap-2 text-slate-700 dark:text-slate-200"
+                                >
+                                  <span className="truncate">{entry.name}</span>
+                                  <div className="flex items-center gap-2 shrink-0">
+                                    <span className="text-[11px] text-slate-400 tabular-nums">
+                                      {(entry.sizeBytes / 1024).toFixed(1)} KB
+                                    </span>
+                                    {(isPdfEntry || isImgEntry) && (
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          if (isPdfEntry) {
+                                            openFullScreenPdfModal(entry.name, entry.bytes);
+                                          } else {
+                                            const blob = new Blob(
+                                              [entry.bytes as unknown as BlobPart],
+                                              { type: entryMime }
+                                            );
+                                            const url = URL.createObjectURL(blob);
+                                            setAssetPreviewModal({
+                                              title: entry.name,
+                                              subtitle: `Extracted from ${
+                                                activeSection === 'pdf'
+                                                  ? toolPdfResult?.fileName
+                                                  : toolImageResult?.fileName
+                                              }`,
+                                              mimeType: entryMime,
+                                              fileName: entry.name,
+                                              bytes: entry.bytes,
+                                              imageDataUrl: url,
+                                            });
+                                          }
+                                        }}
+                                        className="px-2 py-0.5 text-[10px] font-sans font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-blue-600 hover:text-white rounded"
+                                      >
+                                        Preview
+                                      </button>
+                                    )}
+                                    <button
+                                      type="button"
+                                      onClick={() =>
+                                        triggerDownloadBytes(entry.name, entryMime, entry.bytes)
+                                      }
+                                      className="px-2 py-0.5 text-[10px] font-sans font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded"
+                                    >
+                                      Download
+                                    </button>
+                                  </div>
+                                </div>
+                              );
+                            })}
                           </div>
                         </div>
                       )}
@@ -3869,6 +4212,7 @@ function FormaStudioWorkspace() {
                   )}
                 </div>
               </div>
+              </StudioErrorBoundary>
             )}
           </div>
         )}
@@ -3877,7 +4221,7 @@ function FormaStudioWorkspace() {
       {/* Minimal Footer */}
       <footer className="px-4 sm:px-6 py-3 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
         <div>
-          Forma Studio — PDF Studio (60 Tools) · Image Studio (49+ Tools &amp; 312 LUT Presets) · Calculator and Converter Studio (32 Utilities)
+          Forma Studio — 159 Tools (66 PDF · 55 Image · 38 Calculator &amp; Converter) · 100% Local Browser Processing
         </div>
         <div className="flex items-center gap-4 font-mono tabular-nums">
           <button
@@ -3931,7 +4275,7 @@ function FormaStudioWorkspace() {
             </div>
             <div className="p-5 space-y-2.5 text-xs">
               {[
-                { keys: 'Cmd / Ctrl + K', desc: 'Open Global Command Search (141 Tools)' },
+                { keys: 'Cmd / Ctrl + K', desc: 'Open Global Command Search (159 Tools)' },
                 { keys: 'Alt + 1 / 2 / 3', desc: 'Jump to PDF / Image / Calc & Converter Studio' },
                 { keys: 'Alt + 4 / 5', desc: 'Jump to Pipelines (#57) / History & Logs (#60)' },
                 { keys: '?', desc: 'Toggle Keyboard Shortcuts Cheat-Sheet' },

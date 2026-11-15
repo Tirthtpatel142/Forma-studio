@@ -211,3 +211,55 @@ test('convertWorkbenchResultUnits converts result values between SI and Imperial
   const massImpToSi = convertWorkbenchResultUnits(100, 'mass', 'imperial-to-si');
   assert.ok(massImpToSi[0].toFormatted.includes('45.359237 kg'));
 });
+
+test('Expanded Calculator & Converter Tools (#33 Loan EMI, #34 ROI/Margin, #35 Ohms Law, #36 Statistics, #37 Typography CSS, #38 Bandwidth Transfer) compute accurately', async () => {
+  const {
+    calculateLoanEmiAmortization,
+    calculateRoiMarginBreakEven,
+    calculateOhmsLawAndPower,
+    calculateDescriptiveStatistics,
+    convertTypographyAndCssUnits,
+    calculateBandwidthTransferTime,
+  } = await import('./extraToolsEngine');
+
+  // #33 Loan EMI Amortization
+  const emi = calculateLoanEmiAmortization(300000, 6.0, 30, 200);
+  assert.ok(emi.monthlyEmi > 1798 && emi.monthlyEmi < 1800);
+  assert.ok(emi.interestSavedWithExtra > 50000);
+  assert.ok(emi.yearlySchedule.length > 0 && emi.yearlySchedule.length <= 30);
+
+  // #34 ROI, Profit Margin & Break-Even
+  const roi = calculateRoiMarginBreakEven(40, 100, 500, 12000);
+  assert.equal(roi.unitContributionMargin, 60);
+  assert.equal(roi.grossMarginPercent, 60);
+  assert.equal(roi.markupPercent, 150);
+  assert.equal(roi.breakEvenUnits, 200);
+  assert.equal(roi.netProfit, 18000);
+
+  // #35 Ohm's Law & Electrical Power
+  const ohm = calculateOhmsLawAndPower('from-v-i', 24, 2, 100, 100);
+  assert.equal(ohm.resistanceOhm, 12);
+  assert.equal(ohm.powerW, 48);
+  assert.equal(ohm.seriesReq, 200);
+  assert.equal(ohm.parallelReq, 50);
+
+  // #36 Descriptive Statistics & Standard Deviation
+  const stats = calculateDescriptiveStatistics('10, 20, 20, 30, 40');
+  assert.equal(stats.count, 5);
+  assert.equal(stats.mean, 24);
+  assert.equal(stats.median, 20);
+  assert.deepEqual(stats.modes, [20]);
+  assert.equal(stats.range, 30);
+  assert.ok(stats.sampleStdDev > 11.4 && stats.sampleStdDev < 11.41);
+
+  // #37 Typography, Rem/Px & DPI Print Converter
+  const typo = convertTypographyAndCssUnits(24, 'px', 16, 96);
+  assert.equal(typo.rem, 1.5);
+  assert.equal(typo.pt, 18);
+
+  // #38 Data Transfer Time & Bandwidth Calculator
+  const bw = calculateBandwidthTransferTime(10, 'GB', 1, 'Gbps', 0);
+  assert.equal(bw.totalSeconds, 80);
+  assert.equal(bw.formattedDuration, '1m 20s');
+});
+

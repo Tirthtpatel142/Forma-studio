@@ -178,6 +178,24 @@ export function buildPdfVisualMeta(
       color: String(params.bgColor || '#FEF9C3'),
       opacity: Math.max(0.08, Math.min(0.65, Number(params.opacity ?? 25) / 100)),
     };
+  } else if (toolId === 'pdf-64-exhibit-sticker') {
+    meta.stampBadge = {
+      placement: 'top-right',
+      scalePercent: 32,
+      label: String(params.exhibitLabel || 'EXHIBIT A'),
+    };
+  } else if (toolId === 'pdf-65-invert-dark-pdf') {
+    const theme = String(params.readerTheme || 'dark-slate');
+    const colorMap: Record<string, string> = {
+      'dark-slate': '#0F172A',
+      'oled-night': '#050811',
+      'warm-sepia': '#F5E6C8',
+      'sage-paper': '#DCFCE7',
+    };
+    meta.backgroundTint = {
+      color: colorMap[theme] || '#0F172A',
+      opacity: Math.max(0.15, Math.min(0.75, Number(params.intensity ?? 35) / 100)),
+    };
   }
 
   return meta;
@@ -970,10 +988,11 @@ const DIRECT_TEXT_OR_URL_TOOLS = new Set([
   'pdf-29-md-to-pdf',
   'pdf-30-text-to-pdf',
   'pdf-30-txt-to-pdf',
+  'pdf-66-invoice-generator',
 ]);
 
 /**
- * Executes any of the 60 PDF Studio tools on the provided input files and parameters.
+ * Executes any of the 66 PDF Studio tools on the provided input files and parameters.
  */
 export async function executePdfStudioTool(
   toolId: string,
@@ -1006,6 +1025,8 @@ async function executePdfStudioToolCore(
               ? 'html_document.html'
               : toolId === 'pdf-28-url-to-pdf'
               ? 'url_capture.html'
+              : toolId === 'pdf-66-invoice-generator'
+              ? 'commercial_invoice.pdf'
               : toolId.includes('markdown') || toolId.includes('-md-')
               ? 'markdown_document.md'
               : 'plain_text.txt',
@@ -1025,6 +1046,7 @@ async function executePdfStudioToolCore(
     'pdf-29-md-to-pdf',
     'pdf-30-text-to-pdf',
     'pdf-30-txt-to-pdf',
+    'pdf-66-invoice-generator',
   ]);
 
   let srcDoc: PDFDocument | null = null;
@@ -3347,6 +3369,526 @@ ${pagesXml}
         pageCount: 1,
         summary: `Exported JSON operational audit log for "${primaryFile.name}".`,
         previewText: logReport,
+      };
+    }
+
+    // =========================================================================
+    // 8. EXPANDED PDF STUDIO TOOLS (#61 - #66)
+    // =========================================================================
+    case 'pdf-61-insert-blank-pages': {
+      const doc = srcDoc!;
+      const pageStyle = String(params.pageStyle || 'ruled');
+      const insertPosition = String(params.insertPosition || 'end');
+      const count = Math.max(1, Math.min(20, Number(params.count ?? 1)));
+
+      const outDoc = await PDFDocument.create();
+      const font = await outDoc.embedFont(StandardFonts.Helvetica);
+      const srcIndices = doc.getPageIndices();
+      const copiedPages = await outDoc.copyPages(doc, srcIndices);
+      const refSize = copiedPages[0]?.getSize() || { width: 595.28, height: 841.89 };
+
+      const drawStyledBlankPage = (page: any, sheetNum: number) => {
+        const { width, height } = page.getSize();
+        if (pageStyle === 'ruled') {
+          page.drawLine({
+            start: { x: 64, y: 36 },
+            end: { x: 64, y: height - 36 },
+            thickness: 0.8,
+            color: rgb(0.92, 0.35, 0.38),
+            opacity: 0.65,
+          });
+          for (let y = height - 64; y >= 48; y -= 22) {
+            page.drawLine({
+              start: { x: 36, y },
+              end: { x: width - 36, y },
+              thickness: 0.5,
+              color: rgb(0.55, 0.72, 0.92),
+              opacity: 0.55,
+            });
+          }
+        } else if (pageStyle === 'grid') {
+          const step = 18;
+          for (let x = 36; x <= width - 36; x += step) {
+            page.drawLine({
+              start: { x, y: 36 },
+              end: { x, y: height - 36 },
+              thickness: 0.4,
+              color: rgb(0.68, 0.78, 0.9),
+              opacity: 0.5,
+            });
+          }
+          for (let y = 36; y <= height - 36; y += step) {
+            page.drawLine({
+              start: { x: 36, y },
+              end: { x: width - 36, y },
+              thickness: 0.4,
+              color: rgb(0.68, 0.78, 0.9),
+              opacity: 0.5,
+            });
+          }
+        } else if (pageStyle === 'dotted') {
+          const step = 20;
+          for (let x = 42; x <= width - 42; x += step) {
+            for (let y = 42; y <= height - 42; y += step) {
+              page.drawCircle({
+                x,
+                y,
+                size: 0.9,
+                color: rgb(0.55, 0.62, 0.72),
+                opacity: 0.65,
+              });
+            }
+          }
+        }
+        page.drawText(`Notes / Worksheet #${sheetNum}`, {
+          x: width - 135,
+          y: 20,
+          size: 7.5,
+          font,
+          color: rgb(0.55, 0.6, 0.68),
+        });
+      };
+
+      let insertedTotal = 0;
+      if (insertPosition === 'start') {
+        for (let i = 0; i < count; i++) {
+          const blank = outDoc.addPage([refSize.width, refSize.height]);
+          insertedTotal++;
+          drawStyledBlankPage(blank, insertedTotal);
+        }
+        copiedPages.forEach((p) => outDoc.addPage(p));
+      } else if (insertPosition === 'interleave') {
+        copiedPages.forEach((p) => {
+          outDoc.addPage(p);
+          for (let i = 0; i < count; i++) {
+            const blank = outDoc.addPage([refSize.width, refSize.height]);
+            insertedTotal++;
+            drawStyledBlankPage(blank, insertedTotal);
+          }
+        });
+      } else {
+        copiedPages.forEach((p) => outDoc.addPage(p));
+        for (let i = 0; i < count; i++) {
+          const blank = outDoc.addPage([refSize.width, refSize.height]);
+          insertedTotal++;
+          drawStyledBlankPage(blank, insertedTotal);
+        }
+      }
+
+      const outBytes = await outDoc.save({ useObjectStreams: false });
+      return {
+        outputBytes: outBytes,
+        mimeType: 'application/pdf',
+        fileName: `${baseName}_with_${pageStyle}_pages.pdf`,
+        pageCount: outDoc.getPageCount(),
+        summary: `Inserted ${insertedTotal} ${pageStyle} sheet(s) (${insertPosition}) into "${primaryFile.name}" (${outDoc.getPageCount()} total pages).`,
+      };
+    }
+
+    case 'pdf-62-resize-pages': {
+      const doc = srcDoc!;
+      const targetSize = String(params.targetSize || 'A4').toUpperCase();
+      const orientation = String(params.orientation || 'portrait').toLowerCase();
+      const marginPt = Math.max(0, Math.min(72, Number(params.marginPt ?? 18)));
+
+      const sizeMap: Record<string, [number, number]> = {
+        A4: PageSizes.A4,
+        LETTER: PageSizes.Letter,
+        LEGAL: PageSizes.Legal,
+        A3: PageSizes.A3,
+        TABLOID: PageSizes.Tabloid,
+      };
+      const baseDims = sizeMap[targetSize] || PageSizes.A4;
+      const targetW = orientation === 'landscape' ? baseDims[1] : baseDims[0];
+      const targetH = orientation === 'landscape' ? baseDims[0] : baseDims[1];
+
+      const outDoc = await PDFDocument.create();
+      const srcPages = doc.getPages();
+      for (const srcPage of srcPages) {
+        const embedded = await outDoc.embedPage(srcPage);
+        const newPage = outDoc.addPage([targetW, targetH]);
+        const availW = Math.max(72, targetW - marginPt * 2);
+        const availH = Math.max(72, targetH - marginPt * 2);
+        const scale = Math.min(availW / embedded.width, availH / embedded.height);
+        const drawW = embedded.width * scale;
+        const drawH = embedded.height * scale;
+        const dx = (targetW - drawW) / 2;
+        const dy = (targetH - drawH) / 2;
+        newPage.drawPage(embedded, { x: dx, y: dy, width: drawW, height: drawH });
+      }
+
+      const outBytes = await outDoc.save({ useObjectStreams: false });
+      return {
+        outputBytes: outBytes,
+        mimeType: 'application/pdf',
+        fileName: `${baseName}_${targetSize.toLowerCase()}_${orientation}.pdf`,
+        pageCount: outDoc.getPageCount(),
+        summary: `Standardized ${outDoc.getPageCount()} page(s) to ${targetSize} ${orientation} (${Math.round(targetW)}×${Math.round(targetH)} pt) with ${marginPt}pt safety margin.`,
+      };
+    }
+
+    case 'pdf-63-bookmarks-toc': {
+      const doc = srcDoc!;
+      const tocTitle = sanitizeWinAnsi(String(params.tocTitle || 'TABLE OF CONTENTS & DOCUMENT INDEX'));
+      const customRaw = String(params.customEntries || '').trim();
+      const includeDotLeaders = Boolean(params.includeDotLeaders ?? true);
+
+      const extractedPages = await extractPagesTextFromPdfBytes(primaryFile.bytes);
+      const customList = customRaw
+        ? customRaw
+            .split(',')
+            .map((s) => sanitizeWinAnsi(s.trim()))
+            .filter(Boolean)
+        : [];
+
+      const outDoc = await PDFDocument.create();
+      const fontBold = await outDoc.embedFont(StandardFonts.HelveticaBold);
+      const fontRegular = await outDoc.embedFont(StandardFonts.Helvetica);
+
+      const firstPageSize = doc.getPages()[0]?.getSize() || { width: 595.28, height: 841.89 };
+      const tocPage = outDoc.addPage([firstPageSize.width, firstPageSize.height]);
+      const { width, height } = tocPage.getSize();
+
+      // Header Banner
+      tocPage.drawRectangle({
+        x: 36,
+        y: height - 82,
+        width: width - 72,
+        height: 38,
+        color: rgb(0.07, 0.12, 0.24),
+      });
+      tocPage.drawText(tocTitle.slice(0, 58), {
+        x: 48,
+        y: height - 67,
+        size: 12,
+        font: fontBold,
+        color: rgb(0.97, 0.98, 1),
+      });
+      tocPage.drawText(`Document: ${sanitizeWinAnsi(primaryFile.name)} · ${totalPages} Source Page(s)`, {
+        x: 40,
+        y: height - 102,
+        size: 9,
+        font: fontRegular,
+        color: rgb(0.4, 0.46, 0.56),
+      });
+
+      const entries: Array<{ title: string; pageNum: number }> = [];
+      if (customList.length > 0) {
+        customList.forEach((item, idx) => {
+          const targetPage = Math.min(totalPages + 1, idx + 2);
+          entries.push({ title: `${String(idx + 1).padStart(2, '0')}. ${item}`, pageNum: targetPage });
+        });
+      } else {
+        for (let i = 0; i < totalPages; i++) {
+          const lines = (extractedPages[i] || '').split(/\r?\n/);
+          const firstHeading =
+            lines.find((l: string) => l.trim().length > 3) || `Section ${i + 1} — Document Page ${i + 1}`;
+          entries.push({
+            title: `${String(i + 1).padStart(2, '0')}. ${sanitizeWinAnsi(firstHeading).slice(0, 58)}`,
+            pageNum: i + 2,
+          });
+        }
+      }
+
+      let y = height - 134;
+      for (const entry of entries.slice(0, 26)) {
+        if (y < 56) break;
+        tocPage.drawText(entry.title, {
+          x: 44,
+          y,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.12, 0.18, 0.28),
+        });
+        if (includeDotLeaders) {
+          tocPage.drawText('. . . . . . . . . . . . . . . . . . . . . . . . . .', {
+            x: 310,
+            y,
+            size: 9,
+            font: fontRegular,
+            color: rgb(0.62, 0.68, 0.76),
+          });
+        }
+        tocPage.drawText(`Page ${entry.pageNum}`, {
+          x: width - 92,
+          y,
+          size: 10,
+          font: fontBold,
+          color: rgb(0.15, 0.38, 0.82),
+        });
+        y -= 24;
+      }
+
+      const copied = await outDoc.copyPages(doc, doc.getPageIndices());
+      copied.forEach((p) => outDoc.addPage(p));
+      outDoc.setTitle(tocTitle);
+
+      const outBytes = await outDoc.save({ useObjectStreams: false });
+      return {
+        outputBytes: outBytes,
+        mimeType: 'application/pdf',
+        fileName: `${baseName}_with_toc.pdf`,
+        pageCount: outDoc.getPageCount(),
+        summary: `Generated Table of Contents index sheet (${entries.length} section entries) and prepended to "${primaryFile.name}".`,
+        previewText: entries.map((e) => `${e.title} .... Page ${e.pageNum}`).join('\n'),
+      };
+    }
+
+    case 'pdf-64-exhibit-sticker': {
+      const doc = srcDoc!;
+      const exhibitLabel = sanitizeWinAnsi(String(params.exhibitLabel || 'EXHIBIT A'));
+      const docketNumber = sanitizeWinAnsi(String(params.docketNumber || 'CASE NO. 2026-CV-0419'));
+      const badgeColor = String(params.badgeColor || 'crimson');
+      const stampScope = String(params.stampScope || 'first');
+
+      const colorPalette: Record<string, { bg: any; border: any }> = {
+        crimson: { bg: rgb(0.76, 0.11, 0.16), border: rgb(0.55, 0.06, 0.1) },
+        navy: { bg: rgb(0.09, 0.22, 0.48), border: rgb(0.05, 0.14, 0.34) },
+        emerald: { bg: rgb(0.04, 0.47, 0.34), border: rgb(0.02, 0.32, 0.22) },
+        slate: { bg: rgb(0.12, 0.16, 0.23), border: rgb(0.05, 0.08, 0.12) },
+      };
+      const palette = colorPalette[badgeColor] || colorPalette.crimson;
+      const fontBold = await doc.embedFont(StandardFonts.HelveticaBold);
+      const fontRegular = await doc.embedFont(StandardFonts.Helvetica);
+
+      const pages = doc.getPages();
+      const targetPages = stampScope === 'all' ? pages : pages.slice(0, 1);
+
+      targetPages.forEach((page, idx) => {
+        const { width, height } = page.getSize();
+        const boxW = 156;
+        const boxH = 52;
+        const bx = Math.max(20, width - boxW - 24);
+        const by = Math.max(20, height - boxH - 22);
+
+        page.drawRectangle({
+          x: bx,
+          y: by,
+          width: boxW,
+          height: boxH,
+          color: palette.bg,
+          borderColor: palette.border,
+          borderWidth: 1.8,
+        });
+        const labelStr = stampScope === 'all' && pages.length > 1 ? `${exhibitLabel} · P.${idx + 1}` : exhibitLabel;
+        page.drawText(labelStr.slice(0, 20), {
+          x: bx + 12,
+          y: by + 30,
+          size: 13,
+          font: fontBold,
+          color: rgb(1, 1, 1),
+        });
+        page.drawText(docketNumber.slice(0, 26), {
+          x: bx + 12,
+          y: by + 13,
+          size: 8.5,
+          font: fontRegular,
+          color: rgb(0.92, 0.95, 1),
+        });
+      });
+
+      const outBytes = await doc.save({ useObjectStreams: false });
+      return {
+        outputBytes: outBytes,
+        mimeType: 'application/pdf',
+        fileName: `${baseName}_${exhibitLabel.toLowerCase().replace(/[^a-z0-9]+/g, '_')}.pdf`,
+        pageCount: doc.getPageCount(),
+        summary: `Stamped courtroom exhibit sticker "${exhibitLabel}" (${docketNumber}) onto ${targetPages.length} page(s).`,
+      };
+    }
+
+    case 'pdf-65-invert-dark-pdf': {
+      const doc = srcDoc!;
+      const readerTheme = String(params.readerTheme || 'dark-slate');
+      const intensity = Math.max(0.15, Math.min(0.75, Number(params.intensity ?? 35) / 100));
+
+      const themeColors: Record<string, { r: number; g: number; b: number; label: string }> = {
+        'dark-slate': { r: 0.06, g: 0.09, b: 0.16, label: 'Midnight Dark Slate' },
+        'oled-night': { r: 0.02, g: 0.03, b: 0.07, label: 'OLED Pure Night' },
+        'warm-sepia': { r: 0.96, g: 0.9, b: 0.78, label: 'Warm Archival Sepia' },
+        'sage-paper': { r: 0.86, g: 0.98, b: 0.9, label: 'Sage Eye-Care Paper' },
+      };
+      const chosen = themeColors[readerTheme] || themeColors['dark-slate'];
+
+      doc.getPages().forEach((page) => {
+        const { width, height } = page.getSize();
+        page.drawRectangle({
+          x: 0,
+          y: 0,
+          width,
+          height,
+          color: rgb(chosen.r, chosen.g, chosen.b),
+          opacity: intensity,
+        });
+      });
+
+      const outBytes = await doc.save({ useObjectStreams: false });
+      return {
+        outputBytes: outBytes,
+        mimeType: 'application/pdf',
+        fileName: `${baseName}_${readerTheme}.pdf`,
+        pageCount: doc.getPageCount(),
+        summary: `Applied ${chosen.label} reader theme (${Math.round(intensity * 100)}% blend) across ${doc.getPageCount()} page(s).`,
+      };
+    }
+
+    case 'pdf-66-invoice-generator': {
+      const invoiceNumber = sanitizeWinAnsi(String(params.invoiceNumber || 'INV-2026-0842'));
+      const vendorName = sanitizeWinAnsi(String(params.vendorName || 'Forma Studio Engineering LLC'));
+      const clientName = sanitizeWinAnsi(String(params.clientName || 'Acme Global Enterprises Inc.'));
+      const currencySymbol = sanitizeWinAnsi(String(params.currencySymbol || '$')) || '$';
+      const taxPercent = Math.max(0, Math.min(50, Number(params.taxPercent ?? 8.5)));
+      const rawItems = String(
+        params.lineItemsText ||
+          'Enterprise PDF & Image Suite License | 1 | 1450.00\nCustom Pipeline Integration & Setup | 12 | 125.00\nPriority Engineering Support (Annual) | 1 | 600.00'
+      );
+
+      const parsedItems = rawItems
+        .split(/\r?\n/)
+        .map((line) => line.trim())
+        .filter(Boolean)
+        .map((line) => {
+          const parts = line.split('|').map((s) => s.trim());
+          const desc = sanitizeWinAnsi(parts[0] || 'Professional Services');
+          const qty = Math.max(0.01, Number(parts[1]) || 1);
+          const unitPrice = Math.max(0, Number(parts[2]) || 0);
+          return { desc, qty, unitPrice, lineTotal: qty * unitPrice };
+        });
+
+      const subtotal = parsedItems.reduce((acc, item) => acc + item.lineTotal, 0);
+      const taxAmount = subtotal * (taxPercent / 100);
+      const grandTotal = subtotal + taxAmount;
+
+      const outDoc = await PDFDocument.create();
+      outDoc.setTitle(`Invoice ${invoiceNumber} - ${vendorName}`);
+      const fontBold = await outDoc.embedFont(StandardFonts.HelveticaBold);
+      const fontRegular = await outDoc.embedFont(StandardFonts.Helvetica);
+
+      const page = outDoc.addPage(PageSizes.A4);
+      const { width, height } = page.getSize();
+
+      // Top Header Band
+      page.drawRectangle({
+        x: 0,
+        y: height - 110,
+        width,
+        height: 110,
+        color: rgb(0.06, 0.1, 0.2),
+      });
+      page.drawText('COMMERCIAL INVOICE & RECEIPT', {
+        x: 42,
+        y: height - 52,
+        size: 18,
+        font: fontBold,
+        color: rgb(1, 1, 1),
+      });
+      page.drawText(`Issued by: ${vendorName}`, {
+        x: 42,
+        y: height - 76,
+        size: 10.5,
+        font: fontRegular,
+        color: rgb(0.75, 0.82, 0.94),
+      });
+      page.drawText(`INVOICE # ${invoiceNumber}`, {
+        x: width - 205,
+        y: height - 52,
+        size: 12,
+        font: fontBold,
+        color: rgb(0.38, 0.72, 0.98),
+      });
+      page.drawText(`Date: ${new Date().toISOString().slice(0, 10)}`, {
+        x: width - 205,
+        y: height - 74,
+        size: 9.5,
+        font: fontRegular,
+        color: rgb(0.82, 0.88, 0.96),
+      });
+
+      // Bill To Box
+      page.drawRectangle({
+        x: 42,
+        y: height - 188,
+        width: width - 84,
+        height: 56,
+        color: rgb(0.96, 0.98, 1),
+        borderColor: rgb(0.82, 0.87, 0.94),
+        borderWidth: 1,
+      });
+      page.drawText('BILL TO / CLIENT:', {
+        x: 54,
+        y: height - 152,
+        size: 8.5,
+        font: fontBold,
+        color: rgb(0.38, 0.45, 0.58),
+      });
+      page.drawText(clientName, {
+        x: 54,
+        y: height - 170,
+        size: 12,
+        font: fontBold,
+        color: rgb(0.08, 0.12, 0.22),
+      });
+
+      // Table Header
+      let y = height - 226;
+      page.drawRectangle({
+        x: 42,
+        y: y - 6,
+        width: width - 84,
+        height: 24,
+        color: rgb(0.12, 0.2, 0.36),
+      });
+      page.drawText('ITEM DESCRIPTION', { x: 52, y: y + 2, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText('QTY', { x: 340, y: y + 2, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText('UNIT PRICE', { x: 395, y: y + 2, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+      page.drawText('AMOUNT', { x: 485, y: y + 2, size: 9, font: fontBold, color: rgb(1, 1, 1) });
+
+      y -= 30;
+      parsedItems.slice(0, 14).forEach((item, idx) => {
+        page.drawRectangle({
+          x: 42,
+          y: y - 7,
+          width: width - 84,
+          height: 24,
+          color: idx % 2 === 0 ? rgb(0.99, 0.99, 1) : rgb(0.95, 0.97, 0.99),
+          borderColor: rgb(0.88, 0.91, 0.95),
+          borderWidth: 0.5,
+        });
+        page.drawText(item.desc.slice(0, 46), { x: 52, y, size: 9.5, font: fontRegular, color: rgb(0.12, 0.16, 0.24) });
+        page.drawText(String(item.qty), { x: 342, y, size: 9.5, font: fontRegular, color: rgb(0.12, 0.16, 0.24) });
+        page.drawText(`${currencySymbol}${item.unitPrice.toFixed(2)}`, { x: 395, y, size: 9.5, font: fontRegular, color: rgb(0.12, 0.16, 0.24) });
+        page.drawText(`${currencySymbol}${item.lineTotal.toFixed(2)}`, { x: 485, y, size: 9.5, font: fontBold, color: rgb(0.08, 0.14, 0.26) });
+        y -= 24;
+      });
+
+      // Totals Summary Block
+      y -= 18;
+      page.drawRectangle({
+        x: 335,
+        y: y - 56,
+        width: width - 377,
+        height: 78,
+        color: rgb(0.95, 0.97, 1),
+        borderColor: rgb(0.75, 0.82, 0.92),
+        borderWidth: 1,
+      });
+      page.drawText(`Subtotal:`, { x: 348, y: y + 4, size: 9.5, font: fontRegular, color: rgb(0.3, 0.36, 0.46) });
+      page.drawText(`${currencySymbol}${subtotal.toFixed(2)}`, { x: 472, y: y + 4, size: 9.5, font: fontBold, color: rgb(0.15, 0.2, 0.3) });
+
+      page.drawText(`Tax (${taxPercent}%):`, { x: 348, y: y - 16, size: 9.5, font: fontRegular, color: rgb(0.3, 0.36, 0.46) });
+      page.drawText(`${currencySymbol}${taxAmount.toFixed(2)}`, { x: 472, y: y - 16, size: 9.5, font: fontBold, color: rgb(0.15, 0.2, 0.3) });
+
+      page.drawText(`TOTAL DUE:`, { x: 348, y: y - 40, size: 11, font: fontBold, color: rgb(0.08, 0.28, 0.72) });
+      page.drawText(`${currencySymbol}${grandTotal.toFixed(2)}`, { x: 465, y: y - 40, size: 11.5, font: fontBold, color: rgb(0.08, 0.28, 0.72) });
+
+      const outBytes = await outDoc.save({ useObjectStreams: false });
+      return {
+        outputBytes: outBytes,
+        mimeType: 'application/pdf',
+        fileName: `${invoiceNumber.toLowerCase().replace(/[^a-z0-9_-]+/g, '_')}.pdf`,
+        pageCount: 1,
+        summary: `Generated commercial PDF invoice ${invoiceNumber} for "${clientName}" (${parsedItems.length} line items · Total: ${currencySymbol}${grandTotal.toFixed(2)}).`,
+        previewText: `Invoice: ${invoiceNumber}\nFrom: ${vendorName}\nBill To: ${clientName}\nSubtotal: ${currencySymbol}${subtotal.toFixed(2)}\nTax (${taxPercent}%): ${currencySymbol}${taxAmount.toFixed(2)}\nTotal Due: ${currencySymbol}${grandTotal.toFixed(2)}`,
       };
     }
 
