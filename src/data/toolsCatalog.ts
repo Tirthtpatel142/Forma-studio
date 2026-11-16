@@ -41,6 +41,7 @@ export interface StudioTool {
   outputExt: string;
   supportsBatch?: boolean;
   usesWorker?: boolean;
+  keywords?: string[];
   params: ToolParamDefinition[];
 }
 
@@ -69,6 +70,7 @@ export const IMAGE_CATEGORIES: ToolCategory[] = [
   { id: 'img-privacy', studio: 'image', index: 4, name: 'Privacy & Security Tools', description: 'EXIF viewer/scrubber, 100+ cipher encryption/decryption & anti-theft watermarks' },
   { id: 'img-creative', studio: 'image', index: 5, name: 'Creative & Color Utilities', description: 'Collages, stitching, stacking, markup, QR studio, color palettes, frames & SVG trace' },
   { id: 'img-filters', studio: 'image', index: 6, name: 'Filters & Effects (310+)', description: 'WebGL & Worker blur, privacy pixelation, artistic shaders, 310+ LUTs & glitch effects' },
+  { id: 'img-data-art-codes', studio: 'image', index: 7, name: 'Data, Art & Codes', description: 'Image ↔ Binary/Hex, Image ↔ Base64 Data URI, ASCII/Matrix art, LSB Steganography & QR/Barcode studio' },
 ];
 
 export const PDF_TOOLS: StudioTool[] = [
@@ -2269,6 +2271,197 @@ export const IMAGE_TOOLS: StudioTool[] = [
       },
     ],
   },
+  // 8. Data, Art & Codes (56-60)
+  {
+    id: 'img-56-binary-hex',
+    number: 56,
+    studio: 'image',
+    categoryId: 'img-data-art-codes',
+    categoryName: 'Data, Art & Codes',
+    name: 'Image ↔ Binary (0/1) & Hex Converter',
+    shortDesc: 'Convert any image to raw Binary (0/1) or Hex byte streams and reconstruct live images from Binary/Hex code',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'Bi-Directional Image Byte Stream & Binary/Hex Codec',
+    outputExt: 'png',
+    keywords: ['binary', 'decimal', 'hex', 'hexadecimal', 'byte', '0/1', 'code to image', 'image to binary'],
+    params: [
+      {
+        key: 'mode',
+        label: 'Conversion Mode',
+        type: 'select',
+        defaultValue: 'image-to-code',
+        options: [
+          { label: 'Image → Code (Binary 0/1 or Hex)', value: 'image-to-code' },
+          { label: 'Code → Image (Reconstruct from Binary/Hex)', value: 'code-to-image' },
+        ],
+      },
+      {
+        key: 'format',
+        label: 'Byte Format',
+        type: 'select',
+        defaultValue: 'binary',
+        options: [
+          { label: 'Binary (8-bit 0/1)', value: 'binary' },
+          { label: 'Hexadecimal (00–FF)', value: 'hex' },
+        ],
+      },
+      {
+        key: 'delimiter',
+        label: 'Byte Delimiter',
+        type: 'select',
+        defaultValue: 'space',
+        options: [
+          { label: 'Space Separated', value: 'space' },
+          { label: 'None (Continuous Stream)', value: 'none' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'img-57-base64-datauri',
+    number: 57,
+    studio: 'image',
+    categoryId: 'img-data-art-codes',
+    categoryName: 'Data, Art & Codes',
+    name: 'Image ↔ Base64 Data URI Converter',
+    shortDesc: 'Encode images into Base64 Data URIs, Raw Base64, HTML <img>, or CSS background-image and decode Base64 back to PNG/JPG/WebP',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'RFC 4648 Base64 Data URI & Image Transcoder',
+    outputExt: 'png',
+    keywords: ['base64', 'data uri', 'dataurl', 'html img', 'css background', 'base64 to image', 'image to base64'],
+    params: [
+      {
+        key: 'mode',
+        label: 'Conversion Mode',
+        type: 'select',
+        defaultValue: 'image-to-base64',
+        options: [
+          { label: 'Image → Base64', value: 'image-to-base64' },
+          { label: 'Base64 → Image', value: 'base64-to-image' },
+        ],
+      },
+      {
+        key: 'outputFormat',
+        label: 'Snippet / Export Format',
+        type: 'select',
+        defaultValue: 'data-uri',
+        options: [
+          { label: 'Full Data URI (data:image/png;base64,...)', value: 'data-uri' },
+          { label: 'Raw Base64 Payload', value: 'raw' },
+          { label: 'HTML <img> Tag Snippet', value: 'html-img' },
+          { label: 'CSS background-image Rule', value: 'css-bg' },
+        ],
+      },
+    ],
+  },
+  {
+    id: 'img-58-ascii-matrix-art',
+    number: 58,
+    studio: 'image',
+    categoryId: 'img-data-art-codes',
+    categoryName: 'Data, Art & Codes',
+    name: 'Image to ASCII / Matrix Art Generator',
+    shortDesc: 'Transform images into Classic ASCII, Detailed ASCII, Matrix Binary 0/1 Green-on-Black, or Block Shade █▓▒░ art (.txt & PNG)',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'Luminance-Mapped ASCII & Matrix Glyph Renderer',
+    outputExt: 'png',
+    keywords: ['ascii', 'matrix', 'binary', 'block shade', 'text art', 'ansi', 'terminal art'],
+    params: [
+      {
+        key: 'stylePreset',
+        label: 'ASCII / Matrix Style Preset',
+        type: 'select',
+        defaultValue: 'classic',
+        options: [
+          { label: 'Classic ASCII (@%#*+=-:. )', value: 'classic' },
+          { label: 'Detailed 70-Char ASCII Ramp', value: 'detailed' },
+          { label: 'Matrix Binary 0/1 (Green on Black)', value: 'matrix' },
+          { label: 'Block Shade Unicode (█▓▒░)', value: 'blocks' },
+        ],
+      },
+      { key: 'charWidth', label: 'Character Columns Width (40–200)', type: 'range', defaultValue: 100, min: 40, max: 200, step: 5 },
+      { key: 'invertBrightness', label: 'Invert Luminance Brightness', type: 'boolean', defaultValue: false },
+      { key: 'colorMode', label: 'Render Full RGB Color Glyphs', type: 'boolean', defaultValue: false },
+    ],
+  },
+  {
+    id: 'img-59-lsb-steganography',
+    number: 59,
+    studio: 'image',
+    categoryId: 'img-data-art-codes',
+    categoryName: 'Data, Art & Codes',
+    name: 'Secret Message in Image (LSB Steganography)',
+    shortDesc: 'Hide and extract secret encrypted text messages inside lossless PNG pixel least-significant bits (LSB)',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'RGB Channel LSB Bitplane Steganography Codec',
+    outputExt: 'png',
+    keywords: ['steganography', 'lsb', 'secret message', 'hide text in image', 'cipher', 'stego', 'watermark'],
+    params: [
+      {
+        key: 'stegoMode',
+        label: 'Steganography Action',
+        type: 'select',
+        defaultValue: 'hide',
+        options: [
+          { label: 'Hide Secret Message inside Image', value: 'hide' },
+          { label: 'Reveal / Extract Hidden Message from Image', value: 'reveal' },
+        ],
+      },
+      { key: 'secretMessage', label: 'Secret Message to Hide', type: 'textarea', defaultValue: 'CONFIDENTIAL: Zero-knowledge payload verified inside RGB LSB bitplane.' },
+      { key: 'passphrase', label: 'Optional Passphrase Lock', type: 'text', defaultValue: '' },
+    ],
+  },
+  {
+    id: 'img-60-qr-barcode-studio',
+    number: 60,
+    studio: 'image',
+    categoryId: 'img-data-art-codes',
+    categoryName: 'Data, Art & Codes',
+    name: 'QR Code & Barcode Generator / Scanner',
+    shortDesc: 'Generate custom-styled QR Codes & Code128 Barcodes (PNG/SVG) or scan and decode QR/Barcodes from any uploaded image',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'ISO/IEC 18004 QR & Code128 Vector Generator + jsQR Scanner',
+    outputExt: 'png',
+    keywords: ['qr', 'qrcode', 'barcode', 'code128', 'scanner', 'decode qr', 'generate qr'],
+    params: [
+      {
+        key: 'studioMode',
+        label: 'QR / Barcode Mode',
+        type: 'select',
+        defaultValue: 'generate',
+        options: [
+          { label: 'Generate QR Code / Code128 Barcode', value: 'generate' },
+          { label: 'Scan / Read QR from Image', value: 'scan' },
+        ],
+      },
+      {
+        key: 'codeType',
+        label: 'Symbology Type',
+        type: 'select',
+        defaultValue: 'qr',
+        options: [
+          { label: 'QR Code (2D Matrix)', value: 'qr' },
+          { label: 'Code128 Barcode (1D Linear)', value: 'code128' },
+        ],
+      },
+      { key: 'payloadText', label: 'Text / URL Payload', type: 'text', defaultValue: 'https://formastudio.app/verify' },
+      { key: 'sizePx', label: 'Output Size (128–512 px)', type: 'range', defaultValue: 320, min: 128, max: 512, step: 16 },
+      { key: 'fgColor', label: 'Foreground Ink Color', type: 'color', defaultValue: '#0F172A' },
+      { key: 'bgColor', label: 'Background Fill Color', type: 'color', defaultValue: '#FFFFFF' },
+      {
+        key: 'eccLevel',
+        label: 'QR Error Correction Level',
+        type: 'select',
+        defaultValue: 'M',
+        options: [
+          { label: 'Level L (7% recovery)', value: 'L' },
+          { label: 'Level M (15% recovery)', value: 'M' },
+          { label: 'Level Q (25% recovery)', value: 'Q' },
+          { label: 'Level H (30% maximum recovery)', value: 'H' },
+        ],
+      },
+    ],
+  },
 ];
 
 export interface FilterPreset {
@@ -2353,6 +2546,7 @@ export const EXTRA_CATEGORIES: ToolCategory[] = [
   { id: 'extra-converters', studio: 'extra', index: 3, name: 'Unit & Engineering Converters', description: 'Length, digital storage, pressure, mass, speed, volume, temperature, area, time, energy, power, fuel, frequency & angle' },
   { id: 'extra-time', studio: 'extra', index: 4, name: 'Age & World Time Utilities', description: 'Exact calendar age breakdown & multi-city international time zone meeting planner' },
   { id: 'extra-health', studio: 'extra', index: 5, name: 'Health & Fitness Calculators', description: 'WHO BMI, Mifflin-St Jeor / Harris-Benedict BMR & TDEE, US Navy body fat & 1RM strength loads' },
+  { id: 'extra-encoding-ciphers', studio: 'extra', index: 6, name: 'Encoding & Ciphers', description: 'Binary/Hex/Octal translator, Morse code + audio, Caesar/ROT13/Atbash ciphers, Base64/URL/HTML & Unicode inspector' },
 ];
 
 export const EXTRA_TOOLS: StudioTool[] = [
@@ -2860,6 +3054,77 @@ export const EXTRA_TOOLS: StudioTool[] = [
     outputExt: 'unit',
     params: [],
   },
+  // Category 6: Encoding & Ciphers (39-43)
+  {
+    id: 'extra-39-binary-hex-octal',
+    number: 39,
+    studio: 'extra',
+    categoryId: 'extra-encoding-ciphers',
+    categoryName: 'Encoding & Ciphers',
+    name: 'Text ↔ Binary / Decimal / Hex / Octal Translator',
+    shortDesc: 'Translate UTF-8 text to and from 8-bit Binary, Decimal, Hexadecimal, and Octal byte streams with auto-detect',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'UTF-8 Multi-Radix Byte Translator & Auto-Detector',
+    outputExt: 'txt',
+    keywords: ['binary', 'decimal', 'hex', 'hexadecimal', 'octal', 'ascii', 'utf-8', 'byte', 'translator'],
+    params: [],
+  },
+  {
+    id: 'extra-40-morse-code',
+    number: 40,
+    studio: 'extra',
+    categoryId: 'extra-encoding-ciphers',
+    categoryName: 'Encoding & Ciphers',
+    name: 'Morse Code Translator (Text ↔ Morse + Audio)',
+    shortDesc: 'Translate text to/from ITU Morse code with Web Audio API CW tone synthesis (5–30 WPM, 400–900 Hz) & reference chart',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'ITU Morse Transcoder & Web Audio CW Oscillator',
+    outputExt: 'txt',
+    keywords: ['morse', 'morse code', 'cw', 'telegraph', 'audio', 'sos', 'dots and dashes'],
+    params: [],
+  },
+  {
+    id: 'extra-41-cipher-studio',
+    number: 41,
+    studio: 'extra',
+    categoryId: 'extra-encoding-ciphers',
+    categoryName: 'Encoding & Ciphers',
+    name: 'Cipher & Secret Message Studio',
+    shortDesc: 'Encode, decode, and brute-force crack Caesar Cipher (all 25 shifts), ROT13, Atbash, and Reverse Text messages',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'Classical Substitution Cipher & 25-Shift Brute-Force Solver',
+    outputExt: 'txt',
+    keywords: ['cipher', 'caesar', 'rot13', 'atbash', 'reverse text', 'brute force', 'secret message', 'cryptography'],
+    params: [],
+  },
+  {
+    id: 'extra-42-base64-url-html',
+    number: 42,
+    studio: 'extra',
+    categoryId: 'extra-encoding-ciphers',
+    categoryName: 'Encoding & Ciphers',
+    name: 'Base64 / URL / HTML Encoder & Decoder',
+    shortDesc: 'Encode and decode UTF-8 Base64 (standard & URL-safe -/_), URI components/full URLs, and HTML named/numeric entities',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'UTF-8 Base64, RFC 3986 URI & HTML Entity Transcoder',
+    outputExt: 'txt',
+    keywords: ['base64', 'url encode', 'urlencode', 'percent encoding', 'html entities', 'utf-8', 'decoder'],
+    params: [],
+  },
+  {
+    id: 'extra-43-unicode-inspector',
+    number: 43,
+    studio: 'extra',
+    categoryId: 'extra-encoding-ciphers',
+    categoryName: 'Encoding & Ciphers',
+    name: 'ASCII & Unicode Character Inspector',
+    shortDesc: 'Inspect every character for Decimal codepoint, Hex U+XXXX, 8-bit Binary, and UTF-8 byte sequence with CSV/JSON export',
+    executionMode: 'Client-Side (Browser)',
+    engineLabel: 'Unicode Codepoint & UTF-8 Byte Sequence Analyzer',
+    outputExt: 'csv',
+    keywords: ['unicode', 'ascii', 'codepoint', 'utf-8', 'hex', 'binary', 'decimal', 'character inspector'],
+    params: [],
+  },
 ];
 
 export function searchStudioTools(query: string, studio?: StudioType): StudioTool[] {
@@ -2883,11 +3148,13 @@ export function searchStudioTools(query: string, studio?: StudioType): StudioToo
     const studioHashTag = `${t.studio} #${t.number}`;
     const studioPaddedTag = `${t.studio} #${paddedNum}`;
     const calcNumTag = t.studio === 'extra' ? `calc ${t.number} converter ${t.number} calc & converter #${paddedNum}` : '';
+    const keywordMatch = t.keywords ? t.keywords.some((kw) => kw.toLowerCase().includes(q) || q.includes(kw.toLowerCase())) : false;
     return (
       t.name.toLowerCase().includes(q) ||
       t.shortDesc.toLowerCase().includes(q) ||
       t.categoryName.toLowerCase().includes(q) ||
       t.engineLabel.toLowerCase().includes(q) ||
+      keywordMatch ||
       studioLabel.includes(q) ||
       String(t.number) === cleanNum ||
       paddedNum === q.replace(/^#/, '') ||

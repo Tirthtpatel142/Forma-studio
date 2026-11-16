@@ -22,20 +22,20 @@ test('PDF Studio contains all 7 categories and 66 tools numbered 1 to 66', () =>
   }
 });
 
-test('Image Studio contains all 6 categories and 55 tool groups numbered 1 to 55', () => {
-  assert.equal(IMAGE_CATEGORIES.length, 6);
-  assert.equal(IMAGE_TOOLS.length, 55);
-  for (let i = 0; i < 55; i++) {
+test('Image Studio contains all 7 categories and 60 tool groups numbered 1 to 60', () => {
+  assert.equal(IMAGE_CATEGORIES.length, 7);
+  assert.equal(IMAGE_TOOLS.length, 60);
+  for (let i = 0; i < 60; i++) {
     assert.equal(IMAGE_TOOLS[i].number, i + 1);
     assert.equal(IMAGE_TOOLS[i].studio, 'image');
     assert.ok(IMAGE_TOOLS[i].name.length > 0);
   }
 });
 
-test('Extra Tools contains 5 categories and 38 tools numbered 1 to 38 with strict exclusions', () => {
-  assert.equal(EXTRA_CATEGORIES.length, 5);
-  assert.equal(EXTRA_TOOLS.length, 38);
-  for (let i = 0; i < 38; i++) {
+test('Extra Tools contains 6 categories and 43 tools numbered 1 to 43 with strict exclusions', () => {
+  assert.equal(EXTRA_CATEGORIES.length, 6);
+  assert.equal(EXTRA_TOOLS.length, 43);
+  for (let i = 0; i < 43; i++) {
     assert.equal(EXTRA_TOOLS[i].number, i + 1);
     assert.equal(EXTRA_TOOLS[i].studio, 'extra');
     assert.ok(EXTRA_TOOLS[i].name.length > 0);
@@ -51,7 +51,7 @@ test('Filter presets exceed 310+ requirement and encryption profiles exceed 100+
   assert.ok(ENCRYPTION_104_PROFILES.length >= 100);
 });
 
-test('searchStudioTools filters accurately across PDF, Image, and Extra Tools (159 total tools)', () => {
+test('searchStudioTools filters accurately across PDF, Image, and Extra Tools (169 total tools) and rich keywords', () => {
   const batesResults = searchStudioTools('Bates', 'pdf');
   assert.equal(batesResults.length, 1);
   assert.equal(batesResults[0].number, 43);
@@ -64,8 +64,14 @@ test('searchStudioTools filters accurately across PDF, Image, and Extra Tools (1
   assert.equal(graphingResults.length, 1);
   assert.equal(graphingResults[0].number, 9);
 
+  // Verify rich search keywords for the 10 new tools (#39-#43 in extra, #56-#60 in image)
+  for (const kw of ['binary', 'decimal', 'morse', 'cipher', 'caesar', 'base64', 'unicode', 'ascii', 'steganography', 'qr']) {
+    const hits = searchStudioTools(kw);
+    assert.ok(hits.length > 0, `Expected search keyword "${kw}" to match at least 1 tool`);
+  }
+
   const allTools = searchStudioTools('');
-  assert.equal(allTools.length, 159);
+  assert.equal(allTools.length, 169);
 });
 
 test('userStorage strictly isolates preferences and workspace snapshots per user.uid', async () => {

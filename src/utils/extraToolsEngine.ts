@@ -2189,3 +2189,583 @@ export function calculateBandwidthTransferTime(
   };
 }
 
+// ============================================================================
+// #39 TEXT ↔ BINARY / DECIMAL / HEX / OCTAL TRANSLATOR
+// ============================================================================
+export type ByteCodeFormat = 'binary' | 'decimal' | 'hex' | 'octal';
+export type ByteTranslateMode = 'text-to-code' | 'code-to-text' | 'auto-detect';
+export type ByteDelimiter = 'space' | 'none' | 'newline' | 'comma';
+
+export interface BinaryHexOctalResult {
+  output: string;
+  effectiveMode: 'text-to-code' | 'code-to-text';
+  effectiveFormat: ByteCodeFormat;
+  charCount: number;
+  byteCount: number;
+  error?: string;
+}
+
+function getDelimiterString(delim: ByteDelimiter): string {
+  if (delim === 'none') return '';
+  if (delim === 'newline') return '\n';
+  if (delim === 'comma') return ', ';
+  return ' ';
+}
+
+export function translateTextBinaryHexOctal(params: {
+  input: string;
+  mode: ByteTranslateMode;
+  format: ByteCodeFormat;
+  delimiter: ByteDelimiter;
+  useUtf8?: boolean;
+  padLeadingZeros?: boolean;
+}): BinaryHexOctalResult {
+  const raw = String(params.input ?? '');
+  const useUtf8 = params.useUtf8 !== false;
+  const padLeadingZeros = params.padLeadingZeros !== false;
+
+  if (!raw) {
+    return {
+      output: '',
+      effectiveMode: params.mode === 'code-to-text' ? 'code-to-text' : 'text-to-code',
+      effectiveFormat: params.format,
+      charCount: 0,
+      byteCount: 0,
+    };
+  }
+
+  let effectiveMode: 'text-to-code' | 'code-to-text' =
+    params.mode === 'code-to-text' ? 'code-to-text' : 'text-to-code';
+  let effectiveFormat: ByteCodeFormat = params.format;
+
+  const trimmed = raw.trim();
+  if (params.mode === 'auto-detect') {
+    const cleanTokens = trimmed.split(/[\s,]+/).filter(Boolean);
+    const isBinaryContinuous = /^[01]{8,}$/.test(trimmed.replace(/\s+/g, '')) && trimmed.replace(/\s+/g, '').length % 8 === 0;
+    const isBinaryTokens = cleanTokens.length > 0 && cleanTokens.every((t) => /^[01]{1,8}$/.test(t));
+    const isHexTokens =
+      cleanTokens.length >= 2 &&
+      cleanTokens.every((t) => /^(0x)?[0-9a-fA-F]{2}$/.test(t));
+    const isOctalTokens =
+      cleanTokens.length >= 2 &&
+      cleanTokens.every((t) => /^[0-7]{3}$/.test(t));
+    const isDecimalTokens =
+      cleanTokens.length >= 2 &&
+      cleanTokens.every((t) => /^\d{1,3}$/.test(t) && Number(t) >= 0 && Number(t) <= 255);
+
+    if (isBinaryContinuous || isBinaryTokens) {
+      effectiveMode = 'code-to-text';
+      effectiveFormat = 'binary';
+    } else if (isOctalTokens && params.format === 'octal') {
+      effectiveMode = 'code-to-text';
+      effectiveFormat = 'octal';
+    } else if (isDecimalTokens && params.format === 'decimal') {
+      effectiveMode = 'code-to-text';
+      effectiveFormat = 'decimal';
+    } else if (isHexTokens) {
+      effectiveMode = 'code-to-text';
+      effectiveFormat = 'hex';
+    } else if (isDecimalTokens) {
+      effectiveMode = 'code-to-text';
+      effectiveFormat = 'decimal';
+    } else {
+      effectiveMode = 'text-to-code';
+      effectiveFormat = params.format;
+    }
+  }
+
+  if (effectiveMode === 'text-to-code') {
+    const bytes: number[] = useUtf8
+      ? Array.from(new TextEncoder().encode(raw))
+      : Array.from(raw).map((ch) => ch.charCodeAt(0) & 0xff);
+
+    const encodedTokens = bytes.map((b) => {
+      if (effectiveFormat === 'binary') {
+        const s = b.toString(2);
+        return padLeadingZeros ? s.padStart(8, '0') : s;
+      }
+      if (effectiveFormat === 'hex') {
+        const s = b.toString(16).toUpperCase();
+        return padLeadingZeros ? s.padStart(2, '0') : s;
+      }
+      if (effectiveFormat === 'octal') {
+        const s = b.toString(8);
+        return padLeadingZeros ? s.padStart(3, '0') : s;
+      }
+      return padLeadingZeros ? b.toString(10).padStart(3, '0') : b.toString(10);
+    });
+
+    const delimStr = getDelimiterString(params.delimiter);
+    return {
+      output: encodedTokens.join(delimStr),
+      effectiveMode,
+      effectiveFormat,
+      charCount: Array.from(raw).length,
+      byteCount: bytes.length,
+    };
+  }
+
+  // Code -> Text
+  try {
+    let tokens: string[] = [];
+    const stripped = trimmed.replace(/,/g, ' ');
+    if (/\s/.test(stripped)) {
+      tokens = stripped.split(/\s+/).filter(Boolean);
+    } else {
+      // Continuous stream without spaces
+      if (effectiveFormat === 'binary') {
+        const chunkLen = 8;
+        for (let i = 0; i < stripped.length; i += chunkLen) {
+          tokens.push(stripped.slice(i, i + chunkLen));
+        }
+      } else if (effectiveFormat === 'hex') {
+        const cleanHex = stripped.replace(/^0x/i, '');
+        for (let i = 0; i < cleanHex.length; i += 2) {
+          tokens.push(cleanHex.slice(i, i + 2));
+        }
+      } else if (effectiveFormat === 'octal') {
+        for (let i = 0; i < stripped.length; i += 3) {
+          tokens.push(stripped.slice(i, i + 3));
+        }
+      } else {
+        tokens = [stripped];
+      }
+    }
+
+    const radix =
+      effectiveFormat === 'binary'
+        ? 2
+        : effectiveFormat === 'octal'
+        ? 8
+        : effectiveFormat === 'hex'
+        ? 16
+        : 10;
+
+    const bytes: number[] = [];
+    for (const tok of tokens) {
+      const cleanTok = tok.replace(/^(0x|0b|0o)/i, '');
+      const val = parseInt(cleanTok, radix);
+      if (!Number.isFinite(val) || val < 0 || val > 255) {
+        return {
+          output: '',
+          effectiveMode,
+          effectiveFormat,
+          charCount: 0,
+          byteCount: 0,
+          error: `Invalid ${effectiveFormat} byte token "${tok}" (expected 0–255).`,
+        };
+      }
+      bytes.push(val);
+    }
+
+    const uint8 = new Uint8Array(bytes);
+    const decoded = useUtf8
+      ? new TextDecoder('utf-8', { fatal: false }).decode(uint8)
+      : Array.from(uint8)
+          .map((b) => String.fromCharCode(b))
+          .join('');
+
+    return {
+      output: decoded,
+      effectiveMode,
+      effectiveFormat,
+      charCount: Array.from(decoded).length,
+      byteCount: bytes.length,
+    };
+  } catch (err: any) {
+    return {
+      output: '',
+      effectiveMode,
+      effectiveFormat,
+      charCount: 0,
+      byteCount: 0,
+      error: err?.message || 'Unable to decode byte sequence.',
+    };
+  }
+}
+
+// ============================================================================
+// #40 MORSE CODE TRANSLATOR (TEXT ↔ MORSE + AUDIO REFERENCE)
+// ============================================================================
+export const MORSE_CODE_MAP: Record<string, string> = {
+  A: '.-',
+  B: '-...',
+  C: '-.-.',
+  D: '-..',
+  E: '.',
+  F: '..-.',
+  G: '--.',
+  H: '....',
+  I: '..',
+  J: '.---',
+  K: '-.-',
+  L: '.-..',
+  M: '--',
+  N: '-.',
+  O: '---',
+  P: '.--.',
+  Q: '--.-',
+  R: '.-.',
+  S: '...',
+  T: '-',
+  U: '..-',
+  V: '...-',
+  W: '.--',
+  X: '-..-',
+  Y: '-.--',
+  Z: '--..',
+  '0': '-----',
+  '1': '.----',
+  '2': '..---',
+  '3': '...--',
+  '4': '....-',
+  '5': '.....',
+  '6': '-....',
+  '7': '--...',
+  '8': '---..',
+  '9': '----.',
+  '.': '.-.-.-',
+  ',': '--..--',
+  '?': '..--..',
+  "'": '.----.',
+  '!': '-.-.--',
+  '/': '-..-.',
+  '(': '-.--.',
+  ')': '-.--.-',
+  '&': '.-...',
+  ':': '---...',
+  ';': '-.-.-.',
+  '=': '-...-',
+  '+': '.-.-.',
+  '-': '-....-',
+  _: '..--.-',
+  '"': '.-..-.',
+  $: '...-..-',
+  '@': '.--.-.',
+};
+
+const REVERSE_MORSE_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(MORSE_CODE_MAP).map(([k, v]) => [v, k])
+);
+
+export const MORSE_REFERENCE_CHART: Array<{ char: string; code: string }> = [
+  ...'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'.split('').map((c) => ({
+    char: c,
+    code: MORSE_CODE_MAP[c],
+  })),
+];
+
+export function translateMorseCode(params: {
+  input: string;
+  mode: 'text-to-morse' | 'morse-to-text';
+  wordSeparator: 'slash' | 'space';
+}): { output: string; charCount: number; wordCount: number } {
+  const raw = String(params.input ?? '');
+  if (!raw.trim()) {
+    return { output: '', charCount: 0, wordCount: 0 };
+  }
+
+  if (params.mode === 'text-to-morse') {
+    const words = raw.trim().toUpperCase().split(/\s+/);
+    const wordSep = params.wordSeparator === 'slash' ? ' / ' : '   ';
+    const encodedWords = words.map((word) =>
+      Array.from(word)
+        .map((ch) => MORSE_CODE_MAP[ch] ?? ch)
+        .join(' ')
+    );
+    const output = encodedWords.join(wordSep);
+    return {
+      output,
+      charCount: raw.length,
+      wordCount: words.filter(Boolean).length,
+    };
+  }
+
+  // Morse -> Text
+  const normalized = raw.trim();
+  const rawWords = normalized.includes('/')
+    ? normalized.split(/\s*\/\s*/)
+    : normalized.split(/\s{2,}/);
+
+  const decodedWords = rawWords.map((w) =>
+    w
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .map((token) => REVERSE_MORSE_MAP[token] ?? '?')
+      .join('')
+  );
+  const output = decodedWords.join(' ');
+  return {
+    output,
+    charCount: output.length,
+    wordCount: decodedWords.filter(Boolean).length,
+  };
+}
+
+// ============================================================================
+// #41 CIPHER & SECRET MESSAGE STUDIO (CAESAR, ROT13, ATBASH, REVERSE + 25 SHIFTS)
+// ============================================================================
+export type CipherType = 'caesar' | 'rot13' | 'atbash' | 'reverse';
+
+function shiftAlphaText(
+  text: string,
+  shiftAmount: number,
+  preserveSpacesAndPunctuation: boolean
+): string {
+  const normalizedShift = ((shiftAmount % 26) + 26) % 26;
+  const cleaned = preserveSpacesAndPunctuation ? text : text.replace(/[^a-zA-Z0-9]/g, '');
+  let out = '';
+  for (let i = 0; i < cleaned.length; i++) {
+    const code = cleaned.charCodeAt(i);
+    if (code >= 65 && code <= 90) {
+      out += String.fromCharCode(((code - 65 + normalizedShift) % 26) + 65);
+    } else if (code >= 97 && code <= 122) {
+      out += String.fromCharCode(((code - 97 + normalizedShift) % 26) + 97);
+    } else {
+      out += cleaned[i];
+    }
+  }
+  return out;
+}
+
+export function runCipherStudio(params: {
+  input: string;
+  cipher: CipherType;
+  mode: 'encode' | 'decode';
+  shift: number;
+  preserveSpacesAndPunctuation?: boolean;
+}): {
+  output: string;
+  all25Shifts: Array<{ shift: number; text: string }>;
+} {
+  const raw = String(params.input ?? '');
+  const preserve = params.preserveSpacesAndPunctuation !== false;
+  const clampedShift = Math.max(1, Math.min(25, Math.round(Number(params.shift) || 3)));
+
+  let output = '';
+  if (params.cipher === 'caesar') {
+    const effectiveShift = params.mode === 'decode' ? 26 - clampedShift : clampedShift;
+    output = shiftAlphaText(raw, effectiveShift, preserve);
+  } else if (params.cipher === 'rot13') {
+    output = shiftAlphaText(raw, 13, preserve);
+  } else if (params.cipher === 'atbash') {
+    const source = preserve ? raw : raw.replace(/[^a-zA-Z0-9]/g, '');
+    let res = '';
+    for (let i = 0; i < source.length; i++) {
+      const c = source.charCodeAt(i);
+      if (c >= 65 && c <= 90) {
+        res += String.fromCharCode(90 - (c - 65));
+      } else if (c >= 97 && c <= 122) {
+        res += String.fromCharCode(122 - (c - 97));
+      } else {
+        res += source[i];
+      }
+    }
+    output = res;
+  } else {
+    const source = preserve ? raw : raw.replace(/[^a-zA-Z0-9]/g, '');
+    output = Array.from(source).reverse().join('');
+  }
+
+  const all25Shifts: Array<{ shift: number; text: string }> = [];
+  for (let s = 1; s <= 25; s++) {
+    const shiftToUse = params.mode === 'decode' ? 26 - s : s;
+    all25Shifts.push({
+      shift: s,
+      text: shiftAlphaText(raw, shiftToUse, preserve),
+    });
+  }
+
+  return { output, all25Shifts };
+}
+
+// ============================================================================
+// #42 BASE64 / URL / HTML ENCODER & DECODER
+// ============================================================================
+export type EncoderFormatTab = 'base64' | 'url' | 'html';
+
+const NAMED_HTML_ENTITIES_ENCODE: Record<string, string> = {
+  '&': '&amp;',
+  '<': '&lt;',
+  '>': '&gt;',
+  '"': '&quot;',
+  "'": '&#39;',
+};
+
+const NAMED_HTML_ENTITIES_DECODE: Record<string, string> = {
+  '&amp;': '&',
+  '&lt;': '<',
+  '&gt;': '>',
+  '&quot;': '"',
+  '&#39;': "'",
+  '&apos;': "'",
+  '&nbsp;': ' ',
+  '&copy;': '©',
+  '&reg;': '®',
+  '&mdash;': '—',
+  '&ndash;': '–',
+};
+
+export function encodeDecodeBase64UrlHtml(params: {
+  input: string;
+  format: EncoderFormatTab;
+  mode: 'encode' | 'decode';
+  urlSafeBase64?: boolean;
+  urlScope?: 'component' | 'full';
+}): {
+  output: string;
+  inputBytes: number;
+  outputBytes: number;
+  error?: string;
+} {
+  const raw = String(params.input ?? '');
+  const inputBytes = new TextEncoder().encode(raw).length;
+
+  if (!raw) {
+    return { output: '', inputBytes: 0, outputBytes: 0 };
+  }
+
+  try {
+    let output = '';
+    if (params.format === 'base64') {
+      if (params.mode === 'encode') {
+        const utf8Bytes = new TextEncoder().encode(raw);
+        let binary = '';
+        for (let i = 0; i < utf8Bytes.length; i++) {
+          binary += String.fromCharCode(utf8Bytes[i]);
+        }
+        let b64 = btoa(binary);
+        if (params.urlSafeBase64) {
+          b64 = b64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+        }
+        output = b64;
+      } else {
+        let normalized = raw.trim().replace(/\s+/g, '');
+        if (params.urlSafeBase64 || normalized.includes('-') || normalized.includes('_')) {
+          normalized = normalized.replace(/-/g, '+').replace(/_/g, '/');
+        }
+        while (normalized.length % 4 !== 0) {
+          normalized += '=';
+        }
+        const binary = atob(normalized);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) {
+          bytes[i] = binary.charCodeAt(i);
+        }
+        output = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      }
+    } else if (params.format === 'url') {
+      const useFull = params.urlScope === 'full';
+      if (params.mode === 'encode') {
+        output = useFull ? encodeURI(raw) : encodeURIComponent(raw);
+      } else {
+        output = useFull ? decodeURI(raw) : decodeURIComponent(raw.replace(/\+/g, '%20'));
+      }
+    } else {
+      // HTML Entities
+      if (params.mode === 'encode') {
+        output = Array.from(raw)
+          .map((ch) => {
+            if (NAMED_HTML_ENTITIES_ENCODE[ch]) return NAMED_HTML_ENTITIES_ENCODE[ch];
+            const cp = ch.codePointAt(0) ?? 0;
+            if (cp > 127) return `&#x${cp.toString(16).toUpperCase()};`;
+            return ch;
+          })
+          .join('');
+      } else {
+        output = raw
+          .replace(/&#x([0-9a-fA-F]+);/g, (_m, hex) => {
+            const cp = parseInt(hex, 16);
+            return Number.isFinite(cp) ? String.fromCodePoint(cp) : _m;
+          })
+          .replace(/&#(\d+);/g, (_m, dec) => {
+            const cp = parseInt(dec, 10);
+            return Number.isFinite(cp) ? String.fromCodePoint(cp) : _m;
+          })
+          .replace(/&[a-zA-Z0-9]+;/g, (entity) => NAMED_HTML_ENTITIES_DECODE[entity] ?? entity);
+      }
+    }
+
+    const outputBytes = new TextEncoder().encode(output).length;
+    return { output, inputBytes, outputBytes };
+  } catch (err: any) {
+    return {
+      output: '',
+      inputBytes,
+      outputBytes: 0,
+      error: err?.message || `Failed to ${params.mode} ${params.format.toUpperCase()} payload.`,
+    };
+  }
+}
+
+// ============================================================================
+// #43 ASCII & UNICODE CHARACTER INSPECTOR
+// ============================================================================
+export interface UnicodeCharInspectionRow {
+  index: number;
+  char: string;
+  displayChar: string;
+  codePointDec: number;
+  codePointHex: string;
+  binary8Bit: string;
+  utf8HexBytes: string;
+}
+
+export interface UnicodeInspectorResult {
+  charCount: number;
+  utf8ByteCount: number;
+  wordCount: number;
+  rows: UnicodeCharInspectionRow[];
+  csvExport: string;
+  jsonExport: string;
+}
+
+export function inspectAsciiUnicodeCharacters(input: string): UnicodeInspectorResult {
+  const raw = String(input ?? '');
+  const codePoints = Array.from(raw);
+  const encoder = new TextEncoder();
+  const totalBytes = encoder.encode(raw).length;
+  const wordCount = raw.trim() ? raw.trim().split(/\s+/).length : 0;
+
+  const rows: UnicodeCharInspectionRow[] = codePoints.slice(0, 500).map((ch, idx) => {
+    const cp = ch.codePointAt(0) ?? 0;
+    const utf8 = Array.from(encoder.encode(ch));
+    const displayChar =
+      ch === ' '
+        ? '␣ (Space)'
+        : ch === '\n'
+        ? '↵ (LF)'
+        : ch === '\t'
+        ? '⇥ (Tab)'
+        : ch === '\r'
+        ? '⏎ (CR)'
+        : ch;
+    return {
+      index: idx + 1,
+      char: ch,
+      displayChar,
+      codePointDec: cp,
+      codePointHex: `U+${cp.toString(16).toUpperCase().padStart(4, '0')}`,
+      binary8Bit: utf8.map((b) => b.toString(2).padStart(8, '0')).join(' '),
+      utf8HexBytes: utf8.map((b) => b.toString(16).toUpperCase().padStart(2, '0')).join(' '),
+    };
+  });
+
+  const csvHeader = 'Index,Character,Decimal,Hex_Codepoint,Binary_8Bit,UTF8_Bytes';
+  const csvLines = rows.map(
+    (r) =>
+      `${r.index},"${r.displayChar.replace(/"/g, '""')}",${r.codePointDec},${r.codePointHex},"${r.binary8Bit}","${r.utf8HexBytes}"`
+  );
+
+  return {
+    charCount: codePoints.length,
+    utf8ByteCount: totalBytes,
+    wordCount,
+    rows,
+    csvExport: [csvHeader, ...csvLines].join('\n'),
+    jsonExport: JSON.stringify(rows, null, 2),
+  };
+}
+
+

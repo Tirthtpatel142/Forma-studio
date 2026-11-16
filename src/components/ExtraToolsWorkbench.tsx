@@ -15,8 +15,17 @@ import {
   DollarSign,
   AlertTriangle,
   Download,
+  Volume2,
+  Square,
+  ChevronDown,
+  ChevronUp,
+  ClipboardPaste,
 } from 'lucide-react';
 import { StudioTool } from '../data/toolsCatalog';
+import {
+  copyTextToClipboard,
+  readTextFromClipboard,
+} from '../utils/browserCapabilities';
 import {
   AngleMode,
   formatCleanNumber,
@@ -42,6 +51,17 @@ import {
   convertTypographyAndCssUnits,
   TypographyUnit,
   calculateBandwidthTransferTime,
+  translateTextBinaryHexOctal,
+  ByteCodeFormat,
+  ByteTranslateMode,
+  ByteDelimiter,
+  translateMorseCode,
+  MORSE_REFERENCE_CHART,
+  runCipherStudio,
+  CipherType,
+  encodeDecodeBase64UrlHtml,
+  EncoderFormatTab,
+  inspectAsciiUnicodeCharacters,
 } from '../utils/extraToolsEngine';
 import type { CalcHistoryEntry } from '../utils/userStorage';
 
@@ -319,6 +339,46 @@ function getDefaultToolState(toolId: string): Record<string, any> {
         bandwidthUnit: 'Mbps',
         overheadPercent: 5,
       };
+    case 'extra-39-binary-hex-octal':
+      return {
+        input: 'Forma Studio 2026',
+        mode: 'text-to-code' as ByteTranslateMode,
+        format: 'binary' as ByteCodeFormat,
+        delimiter: 'space' as ByteDelimiter,
+        useUtf8: true,
+        padLeadingZeros: true,
+      };
+    case 'extra-40-morse-code':
+      return {
+        input: 'SOS FORMA STUDIO',
+        mode: 'text-to-morse',
+        wordSeparator: 'slash',
+        wpm: 18,
+        toneHz: 600,
+        volume: 65,
+        showReferenceChart: false,
+      };
+    case 'extra-41-cipher-studio':
+      return {
+        input: 'MEET AT DAWN IN THE VAULT',
+        cipher: 'caesar' as CipherType,
+        mode: 'encode',
+        shift: 3,
+        preserveSpaces: true,
+        showAll25Shifts: false,
+      };
+    case 'extra-42-base64-url-html':
+      return {
+        input: 'https://formastudio.app/search?q=PDF & Image <Studio>',
+        format: 'base64' as EncoderFormatTab,
+        mode: 'encode',
+        urlSafeBase64: false,
+        urlScope: 'component',
+      };
+    case 'extra-43-unicode-inspector':
+      return {
+        input: 'Forma Studio — 169 Tools ✓',
+      };
     default:
       return {};
   }
@@ -339,6 +399,82 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
     { id: string; expr: string; mode: AngleMode; result: string }[]
   >([]);
   const [copiedFlag, setCopiedFlag] = useState<boolean>(false);
+  const [isPlayingMorse, setIsPlayingMorse] = useState<boolean>(false);
+  const morseAudioCtxRef = useRef<AudioContext | null>(null);
+  const morseStopTimerRef = useRef<number | null>(null);
+
+  const stopMorseAudio = () => {
+    if (morseStopTimerRef.current !== null) {
+      window.clearTimeout(morseStopTimerRef.current);
+      morseStopTimerRef.current = null;
+    }
+    if (morseAudioCtxRef.current) {
+      try {
+        morseAudioCtxRef.current.close();
+      } catch {
+        // ignore
+      }
+      morseAudioCtxRef.current = null;
+    }
+    setIsPlayingMorse(false);
+  };
+
+  useEffect(() => {
+    return () => {
+      stopMorseAudio();
+    };
+  }, [activeTool.id]);
+
+  const playMorseAudio = (morseString: string, wpm: number, toneHz: number, volumePct: number) => {
+    stopMorseAudio();
+    const cleaned = String(morseString || '').trim();
+    if (!cleaned) return;
+
+    const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+    if (!AudioCtx) {
+      onNotify?.('Web Audio API is not supported in this browser.');
+      return;
+    }
+
+    const ctx = new AudioCtx();
+    morseAudioCtxRef.current = ctx;
+    setIsPlayingMorse(true);
+
+    const safeWpm = Math.max(5, Math.min(30, Number(wpm) || 18));
+    const safeFreq = Math.max(400, Math.min(900, Number(toneHz) || 600));
+    const safeGain = Math.max(0.02, Math.min(1, (Number(volumePct) || 65) / 100));
+    const dotDurationSec = 1.2 / safeWpm;
+
+    let cursor = ctx.currentTime + 0.04;
+    for (let i = 0; i < cleaned.length; i++) {
+      const ch = cleaned[i];
+      if (ch === '.' || ch === '-') {
+        const dur = ch === '.' ? dotDurationSec : dotDurationSec * 3;
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(safeFreq, cursor);
+        gain.gain.setValueAtTime(0.001, cursor);
+        gain.gain.exponentialRampToValueAtTime(safeGain, cursor + 0.008);
+        gain.gain.setValueAtTime(safeGain, cursor + Math.max(0.01, dur - 0.008));
+        gain.gain.exponentialRampToValueAtTime(0.001, cursor + dur);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(cursor);
+        osc.stop(cursor + dur + 0.01);
+        cursor += dur + dotDurationSec;
+      } else if (ch === ' ') {
+        cursor += dotDurationSec * 2;
+      } else if (ch === '/') {
+        cursor += dotDurationSec * 4;
+      }
+    }
+
+    const totalMs = Math.max(100, Math.ceil((cursor - ctx.currentTime) * 1000));
+    morseStopTimerRef.current = window.setTimeout(() => {
+      stopMorseAudio();
+    }, totalMs);
+  };
 
   // Graph Canvas & Hover/Touch Trace state (#9)
   const graphCanvasRef = useRef<HTMLCanvasElement>(null);
@@ -503,13 +639,23 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
   };
 
   const handleCopyText = async (textToCopy: string) => {
-    try {
-      await navigator.clipboard.writeText(textToCopy);
+    const ok = await copyTextToClipboard(textToCopy);
+    if (ok) {
       setCopiedFlag(true);
       onNotify?.('Result copied to clipboard');
       setTimeout(() => setCopiedFlag(false), 1800);
-    } catch {
-      // clipboard fallback
+    } else {
+      onNotify?.('Clipboard access unavailable — please select and copy manually.');
+    }
+  };
+
+  const handlePasteIntoInput = async (fieldKey = 'input') => {
+    const res = await readTextFromClipboard();
+    if (res.ok && res.text) {
+      updateState({ [fieldKey]: res.text });
+      onNotify?.(`Pasted ${res.text.length.toLocaleString()} characters from clipboard`);
+    } else {
+      onNotify?.(res.error || 'Clipboard is empty or permission was denied — use Ctrl/Cmd+V.');
     }
   };
 
@@ -4836,6 +4982,1055 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
     }
 
     // ------------------------------------------------------------------------
+    // #39 TEXT ↔ BINARY / DECIMAL / HEX / OCTAL TRANSLATOR
+    // ------------------------------------------------------------------------
+    if (id === 'extra-39-binary-hex-octal') {
+      const input = String(toolState.input ?? '');
+      const mode: ByteTranslateMode =
+        toolState.mode === 'code-to-text' || toolState.mode === 'auto-detect'
+          ? toolState.mode
+          : 'text-to-code';
+      const format: ByteCodeFormat =
+        toolState.format === 'decimal' ||
+        toolState.format === 'hex' ||
+        toolState.format === 'octal'
+          ? toolState.format
+          : 'binary';
+      const delimiter: ByteDelimiter =
+        toolState.delimiter === 'none' ||
+        toolState.delimiter === 'newline' ||
+        toolState.delimiter === 'comma'
+          ? toolState.delimiter
+          : 'space';
+      const useUtf8 = toolState.useUtf8 !== false;
+      const padLeadingZeros = toolState.padLeadingZeros !== false;
+
+      const res = translateTextBinaryHexOctal({
+        input,
+        mode,
+        format,
+        delimiter,
+        useUtf8,
+        padLeadingZeros,
+      });
+
+      const summary = res.error ? res.error : res.output;
+
+      return {
+        summaryToCopy: summary,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column: Input & Encoding Controls */}
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Input Stream &amp; Radix Options
+                </h3>
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                  {(
+                    [
+                      { id: 'text-to-code', label: 'Text → Code' },
+                      { id: 'code-to-text', label: 'Code → Text' },
+                      { id: 'auto-detect', label: 'Auto-Detect' },
+                    ] as const
+                  ).map((m) => (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => updateState({ mode: m.id })}
+                      className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                        mode === m.id
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {m.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                {(
+                  [
+                    { id: 'binary', label: 'Binary (8-bit)' },
+                    { id: 'decimal', label: 'Decimal' },
+                    { id: 'hex', label: 'Hexadecimal' },
+                    { id: 'octal', label: 'Octal' },
+                  ] as const
+                ).map((fmt) => (
+                  <button
+                    key={fmt.id}
+                    type="button"
+                    onClick={() => updateState({ format: fmt.id })}
+                    className={`py-2 px-2.5 text-xs font-semibold rounded-lg border transition-colors ${
+                      format === fmt.id
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                        : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {fmt.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="space-y-1">
+                  <label className="text-xs font-medium text-slate-700 dark:text-slate-300">
+                    Byte Delimiter
+                  </label>
+                  <select
+                    value={delimiter}
+                    onChange={(e) => updateState({ delimiter: e.target.value })}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg px-2.5 py-1.5 text-xs font-mono"
+                  >
+                    <option value="space">Space</option>
+                    <option value="none">None</option>
+                    <option value="newline">Newline</option>
+                    <option value="comma">Comma</option>
+                  </select>
+                </div>
+
+                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-5">
+                  <input
+                    type="checkbox"
+                    checked={useUtf8}
+                    onChange={(e) => updateState({ useUtf8: e.target.checked })}
+                    className="rounded border-slate-300 text-emerald-600"
+                  />
+                  <span>UTF-8 Multi-Byte</span>
+                </label>
+
+                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer pt-5">
+                  <input
+                    type="checkbox"
+                    checked={padLeadingZeros}
+                    onChange={(e) => updateState({ padLeadingZeros: e.target.checked })}
+                    className="rounded border-slate-300 text-emerald-600"
+                  />
+                  <span>Pad leading zeros (8-bit)</span>
+                </label>
+              </div>
+
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between text-xs">
+                  <span className="font-medium text-slate-700 dark:text-slate-300">
+                    Source Input ({res.charCount} chars · {res.byteCount} bytes)
+                  </span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePasteIntoInput('input')}
+                      className="px-2 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1 transition-colors"
+                    >
+                      <ClipboardPaste className="w-3 h-3" />
+                      <span>Paste</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateState({
+                          input: res.output,
+                          mode:
+                            res.effectiveMode === 'text-to-code'
+                              ? 'code-to-text'
+                              : 'text-to-code',
+                        })
+                      }
+                      className="px-2 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1 transition-colors"
+                    >
+                      <ArrowLeftRight className="w-3 h-3" />
+                      <span>Swap (⇄)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateState({ input: '' })}
+                      className="px-2 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <textarea
+                  rows={5}
+                  value={input}
+                  onChange={(e) => updateState({ input: e.target.value })}
+                  placeholder="Type text or paste Binary (01000110), Hex (46 6F), Decimal, or Octal..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono"
+                />
+              </div>
+            </div>
+
+            {/* Right Column: Live Monospace Output */}
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Translated Output Stream
+                    </h3>
+                    <p className="text-[11px] font-mono text-slate-500">
+                      Active: {res.effectiveMode === 'text-to-code' ? 'Text → Code' : 'Code → Text'} ·{' '}
+                      {res.effectiveFormat.toUpperCase()} · {res.byteCount} bytes
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyText(res.output)}
+                      className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportSummaryTxt(res.output)}
+                      className="px-2.5 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Download .txt</span>
+                    </button>
+                  </div>
+                </div>
+
+                {res.error ? (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                    {res.error}
+                  </div>
+                ) : (
+                  <textarea
+                    readOnly
+                    rows={8}
+                    value={res.output}
+                    placeholder="Translated output appears here..."
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono text-emerald-700 dark:text-emerald-300"
+                  />
+                )}
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 pt-2 border-t border-slate-100 dark:border-slate-800 text-xs font-mono tabular-nums">
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg flex justify-between">
+                  <span className="text-slate-500">Characters</span>
+                  <span className="font-bold">{res.charCount}</span>
+                </div>
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-950 rounded-lg flex justify-between">
+                  <span className="text-slate-500">UTF-8 Bytes</span>
+                  <span className="font-bold">{res.byteCount}</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #40 MORSE CODE TRANSLATOR (TEXT ↔ MORSE + WEB AUDIO CW TONE)
+    // ------------------------------------------------------------------------
+    if (id === 'extra-40-morse-code') {
+      const input = String(toolState.input ?? '');
+      const mode: 'text-to-morse' | 'morse-to-text' =
+        toolState.mode === 'morse-to-text' ? 'morse-to-text' : 'text-to-morse';
+      const wordSeparator: 'slash' | 'space' =
+        toolState.wordSeparator === 'space' ? 'space' : 'slash';
+      const wpm = Math.max(5, Math.min(30, numVal(toolState.wpm, 18)));
+      const toneHz = Math.max(400, Math.min(900, numVal(toolState.toneHz, 600)));
+      const volume = Math.max(5, Math.min(100, numVal(toolState.volume, 65)));
+      const showRef = Boolean(toolState.showReferenceChart);
+
+      const morseRes = translateMorseCode({ input, mode, wordSeparator });
+      const activeMorseStream = mode === 'text-to-morse' ? morseRes.output : input;
+
+      return {
+        summaryToCopy: morseRes.output,
+        ui: (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Input & Audio Synthesizer Controls */}
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Morse Transcoder &amp; CW Audio Controls
+                  </h3>
+                  <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                    {(
+                      [
+                        { id: 'text-to-morse', label: 'Text → Morse' },
+                        { id: 'morse-to-text', label: 'Morse → Text' },
+                      ] as const
+                    ).map((m) => (
+                      <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => updateState({ mode: m.id })}
+                        className={`px-2.5 py-1 text-xs font-semibold rounded-md transition-colors ${
+                          mode === m.id
+                            ? 'bg-emerald-600 text-white'
+                            : 'text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {m.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium text-slate-700 dark:text-slate-300">
+                      Word Separator:
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => updateState({ wordSeparator: 'slash' })}
+                      className={`px-2.5 py-1 rounded-md border font-mono ${
+                        wordSeparator === 'slash'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                          : 'border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      / (Slash)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateState({ wordSeparator: 'space' })}
+                      className={`px-2.5 py-1 rounded-md border font-mono ${
+                        wordSeparator === 'space'
+                          ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300'
+                          : 'border-slate-200 dark:border-slate-800'
+                      }`}
+                    >
+                      Space
+                    </button>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePasteIntoInput('input')}
+                      className="px-2.5 py-1 font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                    >
+                      <ClipboardPaste className="w-3 h-3" />
+                      <span>Paste</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateState({
+                          input: morseRes.output,
+                          mode: mode === 'text-to-morse' ? 'morse-to-text' : 'text-to-morse',
+                        })
+                      }
+                      className="px-2.5 py-1 font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                    >
+                      <ArrowLeftRight className="w-3 h-3" />
+                      <span>Swap (⇄)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateState({ input: '' })}
+                      className="px-2 py-1 text-rose-600 dark:text-rose-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                <textarea
+                  rows={4}
+                  value={input}
+                  onChange={(e) => updateState({ input: e.target.value })}
+                  placeholder={
+                    mode === 'text-to-morse'
+                      ? 'Enter message (e.g. SOS FORMA STUDIO)...'
+                      : 'Enter Morse dots & dashes (e.g. ... --- ...)...'
+                  }
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono"
+                />
+
+                {/* Web Audio API CW Tone Controls */}
+                <div className="p-3.5 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                      Web Audio CW Tone Synthesizer
+                    </span>
+                    <div className="flex items-center gap-2">
+                      {!isPlayingMorse ? (
+                        <button
+                          type="button"
+                          onClick={() => playMorseAudio(activeMorseStream, wpm, toneHz, volume)}
+                          className="px-3 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg flex items-center gap-1.5"
+                        >
+                          <Volume2 className="w-3.5 h-3.5" />
+                          <span>Play Audio</span>
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          onClick={stopMorseAudio}
+                          className="px-3 py-1 text-xs font-semibold bg-rose-600 hover:bg-rose-500 text-white rounded-lg flex items-center gap-1.5"
+                        >
+                          <Square className="w-3.5 h-3.5" />
+                          <span>Stop Audio</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+                    <div>
+                      <label className="block text-[11px] text-slate-500">
+                        Speed: {wpm} WPM
+                      </label>
+                      <input
+                        type="range"
+                        min={5}
+                        max={30}
+                        value={wpm}
+                        onChange={(e) => updateState({ wpm: Number(e.target.value) })}
+                        className="w-full accent-emerald-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500">
+                        Tone: {toneHz} Hz
+                      </label>
+                      <input
+                        type="range"
+                        min={400}
+                        max={900}
+                        step={10}
+                        value={toneHz}
+                        onChange={(e) => updateState({ toneHz: Number(e.target.value) })}
+                        className="w-full accent-emerald-600"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] text-slate-500">
+                        Volume: {volume}%
+                      </label>
+                      <input
+                        type="range"
+                        min={5}
+                        max={100}
+                        step={5}
+                        value={volume}
+                        onChange={(e) => updateState({ volume: Number(e.target.value) })}
+                        className="w-full accent-emerald-600"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Right Column: Morse Output */}
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      {mode === 'text-to-morse' ? 'ITU Morse Code Output' : 'Decoded Text Output'}
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyText(morseRes.output)}
+                      className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    readOnly
+                    rows={7}
+                    value={morseRes.output}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-sm font-mono tracking-wider text-emerald-700 dark:text-emerald-300"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => updateState({ showReferenceChart: !showRef })}
+                  className="w-full py-2 px-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg text-xs font-semibold flex items-center justify-between"
+                >
+                  <span>ITU Morse Code Reference Chart (A–Z, 0–9)</span>
+                  {showRef ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                </button>
+              </div>
+            </div>
+
+            {showRef && (
+              <div className="p-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl">
+                <div className="grid grid-cols-3 sm:grid-cols-6 md:grid-cols-9 gap-2 text-xs font-mono">
+                  {MORSE_REFERENCE_CHART.map((item) => (
+                    <div
+                      key={item.char}
+                      className="p-2 bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg flex items-center justify-between"
+                    >
+                      <span className="font-bold text-slate-900 dark:text-white">{item.char}</span>
+                      <span className="text-emerald-600 dark:text-emerald-400">{item.code}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #41 CIPHER & SECRET MESSAGE STUDIO (CAESAR, ROT13, ATBASH, REVERSE)
+    // ------------------------------------------------------------------------
+    if (id === 'extra-41-cipher-studio') {
+      const input = String(toolState.input ?? '');
+      const cipher: CipherType =
+        toolState.cipher === 'rot13' ||
+        toolState.cipher === 'atbash' ||
+        toolState.cipher === 'reverse'
+          ? toolState.cipher
+          : 'caesar';
+      const mode: 'encode' | 'decode' = toolState.mode === 'decode' ? 'decode' : 'encode';
+      const shift = Math.max(1, Math.min(25, Math.round(numVal(toolState.shift, 3))));
+      const preserveSpaces = toolState.preserveSpaces !== false;
+      const showAll25Shifts = Boolean(toolState.showAll25Shifts);
+
+      const cipherRes = runCipherStudio({
+        input,
+        cipher,
+        mode,
+        shift,
+        preserveSpacesAndPunctuation: preserveSpaces,
+      });
+
+      return {
+        summaryToCopy: cipherRes.output,
+        ui: (
+          <div className="space-y-5">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              {/* Left Column: Cipher Controls & Input */}
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                  {(
+                    [
+                      { id: 'caesar', label: 'Caesar Cipher' },
+                      { id: 'rot13', label: 'ROT13' },
+                      { id: 'atbash', label: 'Atbash' },
+                      { id: 'reverse', label: 'Reverse Text' },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => updateState({ cipher: tab.id })}
+                      className={`py-2 px-2.5 text-xs font-semibold rounded-lg border transition-colors ${
+                        cipher === tab.id
+                          ? 'bg-emerald-600 text-white border-emerald-600'
+                          : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                      }`}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                    {(['encode', 'decode'] as const).map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        onClick={() => updateState({ mode: m })}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md capitalize ${
+                          mode === m
+                            ? 'bg-emerald-600 text-white'
+                            : 'text-slate-600 dark:text-slate-400'
+                        }`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handlePasteIntoInput('input')}
+                      className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                    >
+                      <ClipboardPaste className="w-3 h-3" />
+                      <span>Paste</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        updateState({
+                          input: cipherRes.output,
+                          mode: mode === 'encode' ? 'decode' : 'encode',
+                        })
+                      }
+                      className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                    >
+                      <ArrowLeftRight className="w-3 h-3" />
+                      <span>Swap (⇄)</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => updateState({ input: '' })}
+                      className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:underline"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+
+                {cipher === 'caesar' && (
+                  <div className="space-y-1">
+                    <label className="text-xs font-medium text-slate-700 dark:text-slate-300 font-mono">
+                      Alphabet Shift (1–25): {shift}
+                    </label>
+                    <input
+                      type="range"
+                      min={1}
+                      max={25}
+                      value={shift}
+                      onChange={(e) => updateState({ shift: Number(e.target.value) })}
+                      className="w-full accent-emerald-600"
+                    />
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center justify-between gap-3 text-xs">
+                  <label className="flex items-center gap-2 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={preserveSpaces}
+                      onChange={(e) => updateState({ preserveSpaces: e.target.checked })}
+                      className="rounded border-slate-300 text-emerald-600"
+                    />
+                    <span>Preserve spaces &amp; punctuation</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 cursor-pointer font-semibold text-emerald-700 dark:text-emerald-400">
+                    <input
+                      type="checkbox"
+                      checked={showAll25Shifts}
+                      onChange={(e) => updateState({ showAll25Shifts: e.target.checked })}
+                      className="rounded border-slate-300 text-emerald-600"
+                    />
+                    <span>Show All 25 Shifts (Brute-Force)</span>
+                  </label>
+                </div>
+
+                <textarea
+                  rows={5}
+                  value={input}
+                  onChange={(e) => updateState({ input: e.target.value })}
+                  placeholder="Enter plaintext or ciphertext message..."
+                  className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono"
+                />
+              </div>
+
+              {/* Right Column: Cipher Output */}
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Cipher Output ({cipher.toUpperCase()} · {mode.toUpperCase()})
+                    </h3>
+                    <button
+                      type="button"
+                      onClick={() => handleCopyText(cipherRes.output)}
+                      className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                  </div>
+
+                  <textarea
+                    readOnly
+                    rows={8}
+                    value={cipherRes.output}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono text-emerald-700 dark:text-emerald-300"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {showAll25Shifts && (
+              <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-slate-500">
+                  All 25 Caesar Shifts (Brute-Force Inspector)
+                </h4>
+                <div className="max-h-64 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-800 rounded-lg text-xs font-mono">
+                  {cipherRes.all25Shifts.map((row) => (
+                    <div
+                      key={row.shift}
+                      className="px-3 py-2 flex items-center justify-between gap-3 hover:bg-slate-50 dark:hover:bg-slate-950/60"
+                    >
+                      <span className="text-slate-400 shrink-0">
+                        Shift +{String(row.shift).padStart(2, '0')}
+                      </span>
+                      <span className="flex-1 truncate text-slate-800 dark:text-slate-200">
+                        {row.text}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopyText(row.text)}
+                        className="px-2 py-0.5 text-[11px] bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded"
+                      >
+                        Copy
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #42 BASE64 / URL / HTML ENCODER & DECODER
+    // ------------------------------------------------------------------------
+    if (id === 'extra-42-base64-url-html') {
+      const input = String(toolState.input ?? '');
+      const format: EncoderFormatTab =
+        toolState.format === 'url' || toolState.format === 'html'
+          ? toolState.format
+          : 'base64';
+      const mode: 'encode' | 'decode' = toolState.mode === 'decode' ? 'decode' : 'encode';
+      const urlSafeBase64 = Boolean(toolState.urlSafeBase64);
+      const urlScope: 'component' | 'full' =
+        toolState.urlScope === 'full' ? 'full' : 'component';
+
+      const encRes = encodeDecodeBase64UrlHtml({
+        input,
+        format,
+        mode,
+        urlSafeBase64,
+        urlScope,
+      });
+
+      return {
+        summaryToCopy: encRes.error ? encRes.error : encRes.output,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column: Format Tabs & Source Input */}
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <div className="grid grid-cols-3 gap-2">
+                {(
+                  [
+                    { id: 'base64', label: 'Base64 (UTF-8)' },
+                    { id: 'url', label: 'URL Encode' },
+                    { id: 'html', label: 'HTML Entities' },
+                  ] as const
+                ).map((tab) => (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => updateState({ format: tab.id })}
+                    className={`py-2 px-2.5 text-xs font-semibold rounded-lg border transition-colors ${
+                      format === tab.id
+                        ? 'bg-emerald-600 text-white border-emerald-600'
+                        : 'bg-slate-50 dark:bg-slate-950 border-slate-200 dark:border-slate-800 text-slate-700 dark:text-slate-300'
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-950 rounded-lg border border-slate-200 dark:border-slate-800">
+                  {(['encode', 'decode'] as const).map((m) => (
+                    <button
+                      key={m}
+                      type="button"
+                      onClick={() => updateState({ mode: m })}
+                      className={`px-3 py-1 text-xs font-semibold rounded-md capitalize ${
+                        mode === m
+                          ? 'bg-emerald-600 text-white'
+                          : 'text-slate-600 dark:text-slate-400'
+                      }`}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePasteIntoInput('input')}
+                    className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                  >
+                    <ClipboardPaste className="w-3 h-3" />
+                    <span>Paste</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      updateState({
+                        input: encRes.output,
+                        mode: mode === 'encode' ? 'decode' : 'encode',
+                      })
+                    }
+                    className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                  >
+                    <ArrowLeftRight className="w-3 h-3" />
+                    <span>Swap (⇄)</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateState({ input: '' })}
+                    className="px-2 py-1 text-xs text-rose-600 dark:text-rose-400 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              {format === 'base64' && (
+                <label className="flex items-center gap-2 text-xs text-slate-700 dark:text-slate-300 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={urlSafeBase64}
+                    onChange={(e) => updateState({ urlSafeBase64: e.target.checked })}
+                    className="rounded border-slate-300 text-emerald-600"
+                  />
+                  <span>URL-safe Base64 (- and _ instead of + and /)</span>
+                </label>
+              )}
+
+              {format === 'url' && (
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="text-slate-500">Scope:</span>
+                  <button
+                    type="button"
+                    onClick={() => updateState({ urlScope: 'component' })}
+                    className={`px-2.5 py-1 rounded border ${
+                      urlScope === 'component'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-semibold'
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    Component (encodeURIComponent)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateState({ urlScope: 'full' })}
+                    className={`px-2.5 py-1 rounded border ${
+                      urlScope === 'full'
+                        ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-500 text-emerald-700 dark:text-emerald-300 font-semibold'
+                        : 'border-slate-200 dark:border-slate-800'
+                    }`}
+                  >
+                    Full URL (encodeURI)
+                  </button>
+                </div>
+              )}
+
+              <textarea
+                rows={6}
+                value={input}
+                onChange={(e) => updateState({ input: e.target.value })}
+                placeholder="Paste text, URL, HTML snippet, or Base64 string..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono"
+              />
+            </div>
+
+            {/* Right Column: Encoded/Decoded Output */}
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4 flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {mode === 'encode' ? 'Encoded' : 'Decoded'} Output ({encRes.outputBytes} bytes)
+                  </h3>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => handleCopyText(encRes.output)}
+                      className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md flex items-center gap-1"
+                    >
+                      <Copy className="w-3 h-3" />
+                      <span>Copy</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleExportSummaryTxt(encRes.output)}
+                      className="px-2.5 py-1 text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md flex items-center gap-1"
+                    >
+                      <Download className="w-3 h-3" />
+                      <span>Download .txt</span>
+                    </button>
+                  </div>
+                </div>
+
+                {encRes.error ? (
+                  <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-800 rounded-lg text-xs text-rose-700 dark:text-rose-300">
+                    {encRes.error}
+                  </div>
+                ) : (
+                  <textarea
+                    readOnly
+                    rows={8}
+                    value={encRes.output}
+                    className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono text-emerald-700 dark:text-emerald-300"
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
+    // #43 ASCII & UNICODE CHARACTER INSPECTOR
+    // ------------------------------------------------------------------------
+    if (id === 'extra-43-unicode-inspector') {
+      const input = String(toolState.input ?? '');
+      const uniRes = inspectAsciiUnicodeCharacters(input);
+
+      return {
+        summaryToCopy: uniRes.csvExport,
+        ui: (
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Left Column: Input Box & Summary Bar */}
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Text &amp; Symbol Input
+                </h3>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handlePasteIntoInput('input')}
+                    className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded-md flex items-center gap-1"
+                  >
+                    <ClipboardPaste className="w-3 h-3" />
+                    <span>Paste</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => updateState({ input: '' })}
+                    className="px-2.5 py-1 text-xs font-medium text-rose-600 dark:text-rose-400 hover:underline"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+
+              <textarea
+                rows={5}
+                value={input}
+                onChange={(e) => updateState({ input: e.target.value })}
+                placeholder="Type or paste any ASCII, Unicode, emoji, or technical symbols..."
+                className="w-full bg-slate-50 dark:bg-slate-950 border border-slate-200 dark:border-slate-800 rounded-lg p-3 text-xs font-mono"
+              />
+
+              {/* Summary Bar */}
+              <div className="grid grid-cols-3 gap-3 text-xs font-mono tabular-nums">
+                <div className="p-3 bg-emerald-50/70 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/70 rounded-lg">
+                  <div className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                    Characters
+                  </div>
+                  <div className="text-lg font-bold text-emerald-700 dark:text-emerald-300">
+                    {uniRes.charCount}
+                  </div>
+                </div>
+                <div className="p-3 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-900/70 rounded-lg">
+                  <div className="text-[11px] text-blue-800 dark:text-blue-300">UTF-8 Bytes</div>
+                  <div className="text-lg font-bold text-blue-700 dark:text-blue-300">
+                    {uniRes.utf8ByteCount}
+                  </div>
+                </div>
+                <div className="p-3 bg-indigo-50/70 dark:bg-indigo-950/30 border border-indigo-200 dark:border-indigo-900/70 rounded-lg">
+                  <div className="text-[11px] text-indigo-800 dark:text-indigo-300">Words</div>
+                  <div className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
+                    {uniRes.wordCount}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Right Column: Scrollable Codepoint Table & CSV/JSON Copy */}
+            <div className="p-5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Codepoint &amp; UTF-8 Byte Table
+                </h3>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(uniRes.csvExport)}
+                    className="px-2.5 py-1 text-xs font-semibold bg-emerald-600 hover:bg-emerald-500 text-white rounded-md"
+                  >
+                    Copy All as CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleCopyText(uniRes.jsonExport)}
+                    className="px-2.5 py-1 text-xs font-semibold bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-md"
+                  >
+                    Copy All as JSON
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-72 overflow-y-auto border border-slate-200 dark:border-slate-800 rounded-lg">
+                <table className="w-full text-left text-xs font-mono tabular-nums">
+                  <thead className="bg-slate-50 dark:bg-slate-950 text-slate-500 border-b border-slate-200 dark:border-slate-800 sticky top-0">
+                    <tr>
+                      <th className="py-2 px-2.5">Char</th>
+                      <th className="py-2 px-2.5">Decimal</th>
+                      <th className="py-2 px-2.5">Hex</th>
+                      <th className="py-2 px-2.5">Binary 8-bit</th>
+                      <th className="py-2 px-2.5">UTF-8 Bytes</th>
+                      <th className="py-2 px-2.5 text-right">Copy</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                    {uniRes.rows.map((row) => (
+                      <tr key={row.index} className="hover:bg-slate-50/70 dark:hover:bg-slate-950/40">
+                        <td className="py-1.5 px-2.5 font-bold text-slate-900 dark:text-white">
+                          {row.displayChar}
+                        </td>
+                        <td className="py-1.5 px-2.5">{row.codePointDec}</td>
+                        <td className="py-1.5 px-2.5 text-emerald-600 dark:text-emerald-400">
+                          {row.codePointHex}
+                        </td>
+                        <td className="py-1.5 px-2.5 text-[11px]">{row.binary8Bit}</td>
+                        <td className="py-1.5 px-2.5">{row.utf8HexBytes}</td>
+                        <td className="py-1.5 px-2.5 text-right">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              handleCopyText(
+                                `${row.displayChar} | Dec: ${row.codePointDec} | ${row.codePointHex} | Bin: ${row.binary8Bit} | UTF-8: ${row.utf8HexBytes}`
+                              )
+                            }
+                            className="px-2 py-0.5 text-[10px] bg-slate-100 dark:bg-slate-800 hover:bg-emerald-600 hover:text-white rounded"
+                          >
+                            Copy
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        ),
+      };
+    }
+
+    // ------------------------------------------------------------------------
     // #32 ONE-REP MAX (1RM) STRENGTH CALCULATOR (With Brzycki r >= 37 Guard)
     // ------------------------------------------------------------------------
     const weight = numVal(toolState.weight, 100);
@@ -5017,6 +6212,26 @@ export const ExtraToolsWorkbench: React.FC<ExtraToolsWorkbenchProps> = ({
       return [
         { label: '50 GB Game @ 500 Mbps Fiber', patch: { fileSize: 50, fileSizeUnit: 'GB', bandwidthSpeed: 500, bandwidthUnit: 'Mbps' } },
         { label: '1 TB Backup @ 1 Gbps Link', patch: { fileSize: 1, fileSizeUnit: 'TB', bandwidthSpeed: 1, bandwidthUnit: 'Gbps' } },
+      ];
+    }
+    if (id === 'extra-39-binary-hex-octal') {
+      return [
+        { label: 'Text → 8-bit Binary', patch: { mode: 'text-to-code', format: 'binary', delimiter: 'space' } },
+        { label: 'Text → Hex Bytes', patch: { mode: 'text-to-code', format: 'hex', delimiter: 'space' } },
+        { label: 'Decode Binary Stream', patch: { mode: 'auto-detect', input: '01000110 01101111 01110010 01101101 01100001' } },
+      ];
+    }
+    if (id === 'extra-40-morse-code') {
+      return [
+        { label: 'SOS Distress (... --- ...)', patch: { mode: 'text-to-morse', input: 'SOS' } },
+        { label: 'Decode Morse Sample', patch: { mode: 'morse-to-text', input: '... --- ... / ..-. --- .-. -- .-' } },
+      ];
+    }
+    if (id === 'extra-41-cipher-studio') {
+      return [
+        { label: 'Caesar +3 Classic', patch: { cipher: 'caesar', mode: 'encode', shift: 3 } },
+        { label: 'ROT13 Toggle', patch: { cipher: 'rot13', mode: 'encode' } },
+        { label: 'Brute-Force All 25 Shifts', patch: { cipher: 'caesar', mode: 'decode', showAll25Shifts: true } },
       ];
     }
     if (UNIT_CONVERTER_CONFIGS[id]) {

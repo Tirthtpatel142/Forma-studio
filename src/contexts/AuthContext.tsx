@@ -147,6 +147,8 @@ export function formatFirebaseAuthError(err: unknown): string {
       return 'Google Sign-In popup was closed before completing sign in. You can also sign in with Email & Password above.';
     case 'auth/popup-blocked':
       return 'Your browser blocked the Google Sign-In popup. Please allow popups for this site or sign in with Email & Password above.';
+    case 'auth/unauthorized-domain':
+      return 'This domain (e.g. GitHub Pages) is not yet listed in Firebase Console > Authentication > Settings > Authorized domains. Add your domain there for Google Sign-In, or sign in with Email & Password above.';
     case 'auth/network-request-failed':
       return 'Network error while contacting authentication server. Please check your connection.';
     case 'auth/too-many-requests':
@@ -350,7 +352,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signInWithGoogle = async (): Promise<StudioAuthUser | void> => {
     if (!auth || !googleProvider) {
       throw new Error(
-        'Firebase Google Sign-In is not configured. Please check your VITE_FIREBASE_* environment variables.'
+        'Firebase Google Sign-In is not configured. Please check VITE_FIREBASE_* or firebase-applet-config.json.'
       );
     }
     try {

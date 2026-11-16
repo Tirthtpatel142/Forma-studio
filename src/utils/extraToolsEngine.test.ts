@@ -263,3 +263,226 @@ test('Expanded Calculator & Converter Tools (#33 Loan EMI, #34 ROI/Margin, #35 O
   assert.equal(bw.formattedDuration, '1m 20s');
 });
 
+test('Calculator & Converter Encoding & Ciphers (#39–#43) round-trip accurately', async () => {
+  const {
+    translateTextBinaryHexOctal,
+    translateMorseCode,
+    runCipherStudio,
+    encodeDecodeBase64UrlHtml,
+    inspectAsciiUnicodeCharacters,
+  } = await import('./extraToolsEngine');
+
+  // #39 Text <-> Binary / Decimal / Hex / Octal
+  const binEnc = translateTextBinaryHexOctal({
+    input: 'Forma',
+    mode: 'text-to-code',
+    format: 'binary',
+    delimiter: 'space',
+    useUtf8: true,
+    padLeadingZeros: true,
+  });
+  assert.equal(binEnc.error, undefined);
+  assert.equal(binEnc.output, '01000110 01101111 01110010 01101101 01100001');
+  const binDec = translateTextBinaryHexOctal({
+    input: binEnc.output,
+    mode: 'auto-detect',
+    format: 'binary',
+    delimiter: 'space',
+    useUtf8: true,
+    padLeadingZeros: true,
+  });
+  assert.equal(binDec.output, 'Forma');
+
+  // #40 Morse Code Translator
+  const morseEnc = translateMorseCode({
+    input: 'SOS 2026',
+    mode: 'text-to-morse',
+    wordSeparator: 'slash',
+  });
+  assert.equal(morseEnc.output, '... --- ... / ..--- ----- ..--- -....');
+  const morseDec = translateMorseCode({
+    input: morseEnc.output,
+    mode: 'morse-to-text',
+    wordSeparator: 'slash',
+  });
+  assert.equal(morseDec.output, 'SOS 2026');
+
+  // #41 Cipher Studio (Caesar, ROT13, Atbash, Brute-Force 25 shifts)
+  const caesarEnc = runCipherStudio({
+    input: 'Hello World!',
+    cipher: 'caesar',
+    mode: 'encode',
+    shift: 3,
+    preserveSpacesAndPunctuation: true,
+  });
+  assert.equal(caesarEnc.output, 'Khoor Zruog!');
+  assert.equal(caesarEnc.all25Shifts.length, 25);
+  const caesarDec = runCipherStudio({
+    input: caesarEnc.output,
+    cipher: 'caesar',
+    mode: 'decode',
+    shift: 3,
+    preserveSpacesAndPunctuation: true,
+  });
+  assert.equal(caesarDec.output, 'Hello World!');
+
+  // #42 Base64 / URL / HTML Entities
+  const b64Enc = encodeDecodeBase64UrlHtml({
+    input: 'Forma Studio ✓',
+    format: 'base64',
+    mode: 'encode',
+    urlSafeBase64: false,
+  });
+  assert.equal(b64Enc.error, undefined);
+  const b64Dec = encodeDecodeBase64UrlHtml({
+    input: b64Enc.output,
+    format: 'base64',
+    mode: 'decode',
+    urlSafeBase64: false,
+  });
+  assert.equal(b64Dec.output, 'Forma Studio ✓');
+
+  // #43 ASCII & Unicode Character Inspector
+  const uni = inspectAsciiUnicodeCharacters('A🚀');
+  assert.equal(uni.charCount, 2);
+  assert.equal(uni.utf8ByteCount, 5);
+  assert.equal(uni.rows[0].codePointHex, 'U+0041');
+  assert.equal(uni.rows[1].codePointHex, 'U+1F680');
+});
+
+test('Image Studio Data, Art & Codes (#56–#60) pure algorithms round-trip accurately', async () => {
+  const {
+    bytesToBinaryHexString,
+    parseBinaryHexToBytes,
+    formatImageDataUriOutput,
+    normalizeBase64ToDataUri,
+    generateAsciiArtFromRgba,
+    encodeLsbStegoRgba,
+    decodeLsbStegoRgba,
+    buildCode128SvgString,
+  } = await import('./imageDataArtCodesEngine');
+
+  // #56 Image <-> Binary / Hex
+  const sampleBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47]);
+  const hexOut = bytesToBinaryHexString(sampleBytes, 'hex', 'space');
+  assert.equal(hexOut.codeText, '89 50 4E 47');
+  const parsed = parseBinaryHexToBytes(hexOut.codeText, 'auto');
+  assert.equal(parsed.valid, true);
+  assert.equal(parsed.mimeType, 'image/png');
+  assert.deepEqual(Array.from(parsed.bytes), [0x89, 0x50, 0x4e, 0x47]);
+
+  // #57 Image <-> Base64 Data URI
+  const dataUri = 'data:image/png;base64,iVBORw0KGgo=';
+  const htmlTag = formatImageDataUriOutput(dataUri, 'html-img', 'test.png');
+  assert.ok(htmlTag.formatted.startsWith('<img src="data:image/png;base64,'));
+  const norm = normalizeBase64ToDataUri(htmlTag.formatted);
+  assert.equal(norm.valid, true);
+  assert.equal(norm.dataUri, dataUri);
+
+  // #58 Image to ASCII / Matrix Art
+  const dummyRgba = new Uint8ClampedArray(16 * 16 * 4).fill(200);
+  const ascii = generateAsciiArtFromRgba(dummyRgba, 16, 16, 40, 'matrix-binary', false);
+  assert.equal(ascii.colsCount, 40);
+  assert.ok(ascii.text.includes('1') || ascii.text.includes('0'));
+
+  // #59 LSB Steganography (with passphrase)
+  const carrierRgba = new Uint8ClampedArray(32 * 32 * 4).fill(128);
+  const encodedStego = encodeLsbStegoRgba(carrierRgba, 32, 32, 'Top Secret Coordinate 42', 'key123');
+  assert.equal(encodedStego.valid, true);
+  const decodedStego = decodeLsbStegoRgba(encodedStego.stegoRgba, 'key123');
+  assert.equal(decodedStego.valid, true);
+  assert.equal(decodedStego.message, 'Top Secret Coordinate 42');
+
+  // #60 Code128 Barcode SVG
+  const barcode = buildCode128SvgString('FORMA-169', 320, '#000000', '#FFFFFF');
+  assert.equal(barcode.valid, true);
+  assert.ok(barcode.svg.includes('<svg'));
+  assert.ok(barcode.svg.includes('FORMA-169'));
+});
+
+test('browserCapabilities formats completion notifications and gracefully handles headless clipboard & notifications', async () => {
+  const {
+    formatCompletionNotificationMessage,
+    getNotificationPermissionState,
+    copyTextToClipboard,
+    readTextFromClipboard,
+  } = await import('./browserCapabilities');
+
+  const pdfMsg = formatCompletionNotificationMessage({
+    studio: 'PDF',
+    toolName: 'Merge PDF',
+    fileName: 'merged_contract.pdf',
+    enabledByUser: true,
+  });
+  assert.equal(pdfMsg.title, 'Forma Studio — Ready: Your processed PDF is ready to download.');
+  assert.ok(pdfMsg.body.includes('Merge PDF'));
+  assert.ok(pdfMsg.body.includes('merged_contract.pdf'));
+
+  const imgMsg = formatCompletionNotificationMessage({
+    studio: 'IMAGE',
+    toolName: 'QR Code & Barcode Studio',
+    fileName: 'forma_qr.png',
+    isMultiFile: true,
+    enabledByUser: true,
+  });
+  assert.equal(imgMsg.title, 'Forma Studio — Ready: Your processed image is ready to download.');
+  assert.ok(imgMsg.body.includes('Batch job complete'));
+
+  const pipeMsg = formatCompletionNotificationMessage({
+    studio: 'PIPELINE',
+    toolName: 'Compress + Watermark Pipeline',
+    fileName: 'final.pdf',
+    enabledByUser: true,
+  });
+  assert.equal(pipeMsg.title, 'Forma Studio — Ready: Your processed pipeline output is ready to download.');
+
+  // In Node environment without window.Notification, permission state is 'unsupported'
+  assert.equal(getNotificationPermissionState(), 'unsupported');
+
+  // Graceful fallback when navigator.clipboard is unavailable in Node
+  const copyOk = await copyTextToClipboard('test');
+  assert.equal(copyOk, false);
+  const readRes = await readTextFromClipboard();
+  assert.equal(readRes.ok, false);
+  assert.ok(readRes.error);
+});
+
+test('resolveFirebaseConfig falls back to firebase-applet-config.json when VITE_FIREBASE_* is empty or placeholder (GitHub Pages support)', async () => {
+  const {
+    resolveFirebaseConfig,
+    isFirebaseConfigured,
+    firebaseProjectId,
+    cleanFirebaseConfigValue,
+  } = await import('../lib/firebase');
+  const appletJson = (await import('../../firebase-applet-config.json')).default;
+
+  // 1. Empty env (e.g. GitHub Pages build without .env) falls back to firebase-applet-config.json
+  const fromEmptyEnv = resolveFirebaseConfig({});
+  assert.equal(fromEmptyEnv.apiKey, appletJson.apiKey);
+  assert.equal(fromEmptyEnv.authDomain, appletJson.authDomain);
+  assert.equal(fromEmptyEnv.projectId, appletJson.projectId);
+  assert.equal(fromEmptyEnv.appId, appletJson.appId);
+  assert.equal(fromEmptyEnv.firestoreDatabaseId, appletJson.firestoreDatabaseId);
+
+  // 2. Placeholder env values (YOUR_*, MY_*, remixed-project-id) also fall back to firebase-applet-config.json
+  const fromPlaceholderEnv = resolveFirebaseConfig({
+    VITE_FIREBASE_API_KEY: 'YOUR_FIREBASE_API_KEY',
+    VITE_FIREBASE_PROJECT_ID: 'remixed-project-id',
+  });
+  assert.equal(cleanFirebaseConfigValue('YOUR_FIREBASE_API_KEY'), '');
+  assert.equal(fromPlaceholderEnv.apiKey, appletJson.apiKey);
+  assert.equal(fromPlaceholderEnv.projectId, appletJson.projectId);
+
+  // 3. Explicit VITE_FIREBASE_* overrides take precedence when provided
+  const fromCustomEnv = resolveFirebaseConfig({
+    VITE_FIREBASE_API_KEY: 'AIzaCustomKey123',
+    VITE_FIREBASE_PROJECT_ID: 'custom-gh-pages-proj',
+  });
+  assert.equal(fromCustomEnv.apiKey, 'AIzaCustomKey123');
+  assert.equal(fromCustomEnv.projectId, 'custom-gh-pages-proj');
+  assert.equal(fromCustomEnv.appId, appletJson.appId);
+
+  // 4. Default exported runtime state is configured
+  assert.equal(isFirebaseConfigured, true);
+  assert.equal(firebaseProjectId, appletJson.projectId);
+});

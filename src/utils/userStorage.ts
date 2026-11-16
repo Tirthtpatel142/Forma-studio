@@ -23,6 +23,7 @@ export interface UserPreferencesPayload {
   customPipelinePresets: SavedPipelinePreset[];
   savedToolParamPresets: Record<string, Record<string, any>>;
   calcHistoryByToolId: Record<string, CalcHistoryEntry[]>;
+  completionAlertsEnabled?: boolean;
 }
 
 export interface UserWorkspaceSnapshot {
@@ -62,6 +63,7 @@ export function createEmptyUserPreferences(): UserPreferencesPayload {
     customPipelinePresets: [],
     savedToolParamPresets: {},
     calcHistoryByToolId: {},
+    completionAlertsEnabled: false,
   };
 }
 
@@ -127,6 +129,7 @@ export function loadUserPreferences(uid: string): UserPreferencesPayload {
         parsed.calcHistoryByToolId && typeof parsed.calcHistoryByToolId === 'object'
           ? parsed.calcHistoryByToolId
           : {},
+      completionAlertsEnabled: Boolean(parsed.completionAlertsEnabled),
     };
   } catch {
     return createEmptyUserPreferences();

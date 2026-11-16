@@ -39,6 +39,8 @@ import {
   Archive,
   BookmarkCheck,
   Copy,
+  Bell,
+  BellOff,
 } from 'lucide-react';
 import {
   PDF_CATEGORIES,
@@ -69,6 +71,7 @@ import {
 } from './utils/imageWorkerEngine';
 import { CommandSearchModal } from './components/CommandSearchModal';
 import { ExtraToolsWorkbench } from './components/ExtraToolsWorkbench';
+import { ImageDataArtCodesWorkbench } from './components/ImageDataArtCodesWorkbench';
 import {
   PipelinesBuilderView,
   SystemAndLogsView,
@@ -89,6 +92,12 @@ import {
   CalcHistoryEntry,
 } from './utils/userStorage';
 import { StudioErrorBoundary } from './components/StudioErrorBoundary';
+import {
+  getNotificationPermissionState,
+  requestCompletionNotificationPermission,
+  sendCompletionNotification,
+  copyTextToClipboard,
+} from './utils/browserCapabilities';
 
 type ActiveSection = 'pdf' | 'image' | 'extra' | 'pipelines' | 'system';
 
@@ -166,6 +175,8 @@ export const BEFORE_AFTER_COMPARE_TOOL_IDS = new Set([
   'img-49-glitch-distortion',
   'img-52-duotone-studio',
 ]);
+
+const TOTAL_TOOLS_COUNT = PDF_TOOLS.length + IMAGE_TOOLS.length + EXTRA_TOOLS.length;
 
 function dataUrlToUint8Array(dataUrl: string): Uint8Array {
   const parts = dataUrl.split(',');
@@ -258,6 +269,7 @@ function FormaStudioWorkspace() {
     Record<string, CalcHistoryEntry[]>
   >({});
   const [recentToolIds, setRecentToolIds] = useState<string[]>([]);
+  const [completionAlertsEnabled, setCompletionAlertsEnabled] = useState<boolean>(false);
   const [hydratedUid, setHydratedUid] = useState<string | null>(null);
 
   // Per-Tool Isolated File, Queue & Result State (Zero Global Leakage, Zero Pre-loaded Samples)
@@ -328,6 +340,30 @@ function FormaStudioWorkspace() {
     }, 3500);
   };
 
+  const handleToggleCompletionAlerts = async () => {
+    const next = !completionAlertsEnabled;
+    if (next) {
+      const perm = await requestCompletionNotificationPermission();
+      setCompletionAlertsEnabled(true);
+      if (perm === 'granted') {
+        pushToast(
+          'Completion Alerts enabled — you will be notified when PDF, Image, or Pipeline jobs finish.',
+          'success'
+        );
+      } else if (perm === 'denied') {
+        pushToast(
+          'Completion Alerts enabled (in-app mode; browser notifications are blocked in site settings).',
+          'info'
+        );
+      } else {
+        pushToast('Completion Alerts enabled for PDF, Image & Pipeline jobs.', 'success');
+      }
+    } else {
+      setCompletionAlertsEnabled(false);
+      pushToast('Completion Alerts turned off.', 'info');
+    }
+  };
+
   const wipeAllInMemoryWorkspaceState = () => {
     setFilesByToolId({});
     setSelectedIdsByToolId({});
@@ -347,6 +383,7 @@ function FormaStudioWorkspace() {
     setCustomPipelinePresets([]);
     setSavedToolParamPresets({});
     setCalcHistoryByToolId({});
+    setCompletionAlertsEnabled(false);
     setPdfViewerModal(null);
     setAssetPreviewModal(null);
     setErrorMessage(null);
@@ -381,6 +418,7 @@ function FormaStudioWorkspace() {
     setCustomPipelinePresets(prefs.customPipelinePresets || []);
     setSavedToolParamPresets(prefs.savedToolParamPresets || {});
     setCalcHistoryByToolId(prefs.calcHistoryByToolId || {});
+    setCompletionAlertsEnabled(Boolean(prefs.completionAlertsEnabled));
     if (prefs.savedToolParamPresets && Object.keys(prefs.savedToolParamPresets).length > 0) {
       setParamsByToolId((prev) => ({
         ...prev,
@@ -427,6 +465,7 @@ function FormaStudioWorkspace() {
       customPipelinePresets,
       savedToolParamPresets,
       calcHistoryByToolId,
+      completionAlertsEnabled,
     });
   }, [
     user?.uid,
@@ -436,6 +475,7 @@ function FormaStudioWorkspace() {
     customPipelinePresets,
     savedToolParamPresets,
     calcHistoryByToolId,
+    completionAlertsEnabled,
   ]);
 
   // Persist user workspace snapshot strictly under user.uid (debounced by 350ms to avoid main-thread stalls)
@@ -1245,6 +1285,10 @@ function FormaStudioWorkspace() {
     setWorkerProgress(10);
     setErrorMessage(null);
 
+    if (completionAlertsEnabled && getNotificationPermissionState() === 'default') {
+      void requestCompletionNotificationPermission();
+    }
+
     try {
       if (activeTool.studio === 'pdf') {
         const orderedSelectedItems: WorkspaceFileItem[] = [];
@@ -1353,6 +1397,20 @@ function FormaStudioWorkspace() {
           },
           ...prev,
         ]);
+
+        sendCompletionNotification({
+          studio: 'PDF',
+          toolName: activeTool.name,
+          fileName: res.fileName,
+          isMultiFile: selectedFilesPayload.length > 1,
+          enabledByUser: completionAlertsEnabled,
+        });
+        if (completionAlertsEnabled || selectedFilesPayload.length > 1) {
+          pushToast(
+            `Forma Studio — Ready: Your processed PDF (${res.fileName}) is ready to download.`,
+            'success'
+          );
+        }
       } else {
         // Image Studio Execution
         const isStandalone = STANDALONE_IMAGE_TOOL_IDS.has(tid);
@@ -1468,6 +1526,20 @@ function FormaStudioWorkspace() {
           },
           ...prev,
         ]);
+
+        sendCompletionNotification({
+          studio: 'IMAGE',
+          toolName: activeTool.name,
+          fileName: res.fileName,
+          isMultiFile: orderedImages.length > 1,
+          enabledByUser: completionAlertsEnabled,
+        });
+        if (completionAlertsEnabled || orderedImages.length > 1) {
+          pushToast(
+            `Forma Studio — Ready: Your processed image (${res.fileName}) is ready to download.`,
+            'success'
+          );
+        }
       }
 
       if (typeof window !== 'undefined' && window.innerWidth < 1024) {
@@ -1737,6 +1809,10 @@ function FormaStudioWorkspace() {
     setErrorMessage(null);
     const t0 = performance.now();
 
+    if (completionAlertsEnabled && getNotificationPermissionState() === 'default') {
+      void requestCompletionNotificationPermission();
+    }
+
     try {
       if (pipelineFiles.length === 0) {
         throw new Error(
@@ -1855,6 +1931,18 @@ function FormaStudioWorkspace() {
         },
         ...prev,
       ]);
+
+      sendCompletionNotification({
+        studio: 'PIPELINE',
+        toolName: `Pipeline (${steps.length} steps)`,
+        fileName: currentName,
+        isMultiFile: pipelineFiles.length > 1,
+        enabledByUser: completionAlertsEnabled,
+      });
+      pushToast(
+        `Forma Studio — Ready: Your processed pipeline output (${currentName}) is ready to download.`,
+        'success'
+      );
     } catch (err: any) {
       setErrorMessage(err?.message || 'Pipeline execution failed.');
     } finally {
@@ -2147,7 +2235,7 @@ function FormaStudioWorkspace() {
             >
               <FileText className="w-3.5 h-3.5" />
               <span className="lg:hidden">PDF</span>
-              <span className="hidden lg:inline">PDF Studio (60)</span>
+              <span className="hidden lg:inline">PDF Studio ({PDF_TOOLS.length})</span>
             </button>
             <button
               type="button"
@@ -2160,7 +2248,7 @@ function FormaStudioWorkspace() {
             >
               <ImageIcon className="w-3.5 h-3.5" />
               <span className="lg:hidden">Image</span>
-              <span className="hidden lg:inline">Image Studio (49)</span>
+              <span className="hidden lg:inline">Image Studio ({IMAGE_TOOLS.length})</span>
             </button>
             <button
               type="button"
@@ -2173,7 +2261,7 @@ function FormaStudioWorkspace() {
             >
               <Calculator className="w-3.5 h-3.5" />
               <span className="lg:hidden">Calc &amp; Convert</span>
-              <span className="hidden lg:inline">Calculator and Converter Studio (32)</span>
+              <span className="hidden lg:inline">Calculator and Converter Studio ({EXTRA_TOOLS.length})</span>
             </button>
             <button
               type="button"
@@ -2238,6 +2326,36 @@ function FormaStudioWorkspace() {
 
             <button
               type="button"
+              onClick={handleToggleCompletionAlerts}
+              aria-label={
+                completionAlertsEnabled
+                  ? 'Disable completion notifications'
+                  : 'Enable Completion Alerts'
+              }
+              title={
+                completionAlertsEnabled
+                  ? 'Completion Alerts Active (click to turn off)'
+                  : 'Enable Completion Alerts for PDF, Image & Pipeline jobs'
+              }
+              data-testid="toggle-completion-alerts-button"
+              className={`p-1.5 sm:px-2 sm:py-1.5 text-xs font-medium border rounded-lg flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0 ${
+                completionAlertsEnabled
+                  ? 'bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700'
+                  : 'text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border-slate-200 dark:border-slate-700'
+              }`}
+            >
+              {completionAlertsEnabled ? (
+                <Bell className="w-3.5 h-3.5 text-emerald-500" />
+              ) : (
+                <BellOff className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
+              )}
+              <span className="hidden 2xl:inline">
+                {completionAlertsEnabled ? 'Alerts On' : 'Enable Alerts'}
+              </span>
+            </button>
+
+            <button
+              type="button"
               onClick={() => setIsDark((d) => !d)}
               aria-label={isDark ? 'Switch to Daylight Mode' : 'Switch to Precision Dark Mode'}
               className="p-1.5 sm:px-2 sm:py-1.5 text-xs font-medium text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg flex items-center gap-1.5 transition-colors whitespace-nowrap shrink-0"
@@ -2296,6 +2414,27 @@ function FormaStudioWorkspace() {
                   </div>
                   <button
                     type="button"
+                    onClick={handleToggleCompletionAlerts}
+                    className={`w-full py-1.5 px-3 font-medium rounded-lg text-xs flex items-center justify-between transition-colors border ${
+                      completionAlertsEnabled
+                        ? 'bg-emerald-50 dark:bg-emerald-950/50 text-emerald-700 dark:text-emerald-300 border-emerald-200 dark:border-emerald-800'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border-transparent'
+                    }`}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {completionAlertsEnabled ? (
+                        <Bell className="w-3.5 h-3.5 text-emerald-500" />
+                      ) : (
+                        <BellOff className="w-3.5 h-3.5 text-slate-400" />
+                      )}
+                      <span>Enable Completion Alerts</span>
+                    </span>
+                    <span className="font-mono text-[10px] font-bold">
+                      {completionAlertsEnabled ? 'ON' : 'OFF'}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
                     onClick={() => {
                       setFilesByToolId({});
                       setSelectedIdsByToolId({});
@@ -2351,10 +2490,10 @@ function FormaStudioWorkspace() {
               <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
                 <span className="text-sm font-bold text-slate-900 dark:text-white">
                   {activeSection === 'pdf'
-                    ? 'PDF Studio (60 Tools)'
+                    ? `PDF Studio (${PDF_TOOLS.length} Tools)`
                     : activeSection === 'image'
-                    ? 'Image Studio (49 Tools)'
-                    : 'Calculator and Converter Studio (32)'}
+                    ? `Image Studio (${IMAGE_TOOLS.length} Tools)`
+                    : `Calculator and Converter Studio (${EXTRA_TOOLS.length})`}
                 </span>
                 <button
                   type="button"
@@ -2541,17 +2680,17 @@ function FormaStudioWorkspace() {
                     <div className="text-xs text-slate-500 dark:text-slate-400">
                       Complete Tool Catalog ·{' '}
                       {activeSection === 'pdf'
-                        ? '66 PDF Studio Tools'
+                        ? `${PDF_TOOLS.length} PDF Studio Tools`
                         : activeSection === 'image'
-                        ? '55 Image Studio Tools & 312 LUT Presets'
-                        : '38 Offline Calculators, 2D Grapher & Engineering Unit Converters'}
+                        ? `${IMAGE_TOOLS.length} Image Studio Tools & ${ALL_312_FILTER_PRESETS.length} LUT Presets`
+                        : `${EXTRA_TOOLS.length} Offline Calculators, 2D Grapher, Unit Converters & Ciphers`}
                     </div>
                     <h1 className="text-2xl font-bold text-slate-900 dark:text-white mt-0.5">
                       {activeSection === 'pdf'
-                        ? 'PDF Studio — Complete 66-Tool Architecture'
+                        ? `PDF Studio — Complete ${PDF_TOOLS.length}-Tool Architecture`
                         : activeSection === 'image'
-                        ? 'Image Studio — Complete 55-Tool & 312-Filter Architecture'
-                        : 'Calculator and Converter Studio — 38 Calculators, Graphing & Unit Converters'}
+                        ? `Image Studio — Complete ${IMAGE_TOOLS.length}-Tool & ${ALL_312_FILTER_PRESETS.length}-Filter Architecture`
+                        : `Calculator and Converter Studio — ${EXTRA_TOOLS.length} Calculators, Graphing, Converters & Ciphers`}
                     </h1>
                   </div>
                   <div className="flex flex-wrap items-center gap-2 shrink-0">
@@ -2753,6 +2892,47 @@ function FormaStudioWorkspace() {
                   </StudioErrorBoundary>
                 </div>
               </div>
+            ) : activeSection === 'image' && activeTool.categoryId === 'img-data-art-codes' ? (
+              /* Image Studio Category 07: Data, Art & Codes (#56-#60) Dedicated 2-Column Desktop / 1-Column Mobile Workbench */
+              <StudioErrorBoundary toolName={activeTool.name} onResetTool={handleClearToolFiles}>
+                <ImageDataArtCodesWorkbench
+                  activeTool={activeTool}
+                  activeFile={toolActiveFile}
+                  onUploadFile={async (file) => {
+                    await processIncomingFiles([file]);
+                  }}
+                  onClearFile={handleClearToolFiles}
+                  onOpenDirectory={() => setViewMode('directory')}
+                  onOpenMobileDrawer={() => setIsMobileToolDrawerOpen(true)}
+                  onRecordCompletedOutput={(item) => {
+                    const timestamp = new Date().toTimeString().slice(0, 8);
+                    setCompletedOutputs((prev) => [
+                      {
+                        id: `out-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                        toolId: activeTool.id,
+                        toolNumber: activeTool.number,
+                        toolName: activeTool.name,
+                        studio: 'IMAGE',
+                        fileName: item.fileName,
+                        mimeType: item.mimeType,
+                        sizeBytes: item.outputBytes.byteLength,
+                        completedAt: timestamp,
+                        summary: item.summary,
+                        outputBytes: item.outputBytes,
+                        imageDataUrl: item.imageDataUrl,
+                      },
+                      ...prev,
+                    ]);
+                    sendCompletionNotification({
+                      studio: 'IMAGE',
+                      toolName: activeTool.name,
+                      fileName: item.fileName,
+                      enabledByUser: completionAlertsEnabled,
+                    });
+                  }}
+                  onNotify={(msg, tone) => pushToast(msg, tone || 'info')}
+                />
+              </StudioErrorBoundary>
             ) : (
               /* Workbench: Desktop 2-column grid (Center + Right Inspector), Mobile ordered (Upload -> Params/Run -> Preview/Output) */
               <StudioErrorBoundary toolName={activeTool.name} onResetTool={handleClearToolFiles}>
@@ -4221,7 +4401,7 @@ function FormaStudioWorkspace() {
       {/* Minimal Footer */}
       <footer className="px-4 sm:px-6 py-3 bg-white dark:bg-slate-950 border-t border-slate-200 dark:border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-2 text-xs text-slate-500 dark:text-slate-400">
         <div>
-          Forma Studio — 159 Tools (66 PDF · 55 Image · 38 Calculator &amp; Converter) · 100% Local Browser Processing
+          Forma Studio — {TOTAL_TOOLS_COUNT} Tools ({PDF_TOOLS.length} PDF · {IMAGE_TOOLS.length} Image · {EXTRA_TOOLS.length} Calculator &amp; Converter) · 100% Local Browser Processing
         </div>
         <div className="flex items-center gap-4 font-mono tabular-nums">
           <button
@@ -4275,7 +4455,7 @@ function FormaStudioWorkspace() {
             </div>
             <div className="p-5 space-y-2.5 text-xs">
               {[
-                { keys: 'Cmd / Ctrl + K', desc: 'Open Global Command Search (159 Tools)' },
+                { keys: 'Cmd / Ctrl + K', desc: `Open Global Command Search (${TOTAL_TOOLS_COUNT} Tools)` },
                 { keys: 'Alt + 1 / 2 / 3', desc: 'Jump to PDF / Image / Calc & Converter Studio' },
                 { keys: 'Alt + 4 / 5', desc: 'Jump to Pipelines (#57) / History & Logs (#60)' },
                 { keys: '?', desc: 'Toggle Keyboard Shortcuts Cheat-Sheet' },

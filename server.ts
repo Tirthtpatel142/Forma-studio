@@ -2,6 +2,12 @@ import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import {
+  PDF_TOOLS,
+  IMAGE_TOOLS,
+  EXTRA_TOOLS,
+  ALL_312_FILTER_PRESETS,
+} from './src/data/toolsCatalog.ts';
 
 dotenv.config();
 
@@ -76,11 +82,11 @@ async function startServer() {
     res.json({
       service: 'Forma Studio API v1',
       status: 'nominal',
-      pdfToolsCount: 60,
-      imageToolGroupsCount: 49,
-      extraToolsCount: 32,
-      totalToolsCount: 141,
-      filterPresetsCount: 312,
+      pdfToolsCount: PDF_TOOLS.length,
+      imageToolGroupsCount: IMAGE_TOOLS.length,
+      extraToolsCount: EXTRA_TOOLS.length,
+      totalToolsCount: PDF_TOOLS.length + IMAGE_TOOLS.length + EXTRA_TOOLS.length,
+      filterPresetsCount: ALL_312_FILTER_PRESETS.length,
       aiModels: {
         textAndVision: 'gemini-2.5-flash',
         imageEditing: 'gemini-2.5-flash-image',

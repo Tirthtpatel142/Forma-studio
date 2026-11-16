@@ -18,6 +18,9 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
+import { PDF_TOOLS, IMAGE_TOOLS, EXTRA_TOOLS } from '../data/toolsCatalog';
+
+const TOTAL_STUDIO_TOOLS_COUNT = PDF_TOOLS.length + IMAGE_TOOLS.length + EXTRA_TOOLS.length;
 
 interface AuthGateOrModalProps {
   mode?: 'fullscreen-gate' | 'modal';
@@ -141,7 +144,7 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
               : 'Reset your password'}
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Isolated per-user storage for all 159 PDF, Image &amp; Calculator tools
+            Isolated per-user storage for all {TOTAL_STUDIO_TOOLS_COUNT} PDF, Image &amp; Calculator tools
           </p>
         </div>
         {mode === 'modal' && onClose && (
@@ -466,7 +469,7 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
               AUTHENTICATED WORKSTATION GATE
             </div>
             <h2 className="text-2xl sm:text-3xl font-bold tracking-tight text-slate-900 dark:text-white leading-tight">
-              159 Precision Tools Across PDF, Image &amp; Engineering Calculators.
+              {TOTAL_STUDIO_TOOLS_COUNT} Precision Tools Across PDF, Image &amp; Engineering Calculators.
             </h2>
             <p className="text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
               Sign in with your Email &amp; Password or Google account to unlock your private Forma
@@ -479,7 +482,7 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
               <div className="p-3.5 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
                   <FileText className="w-4 h-4 text-blue-500 shrink-0" />
-                  <span>PDF Studio (66 Tools)</span>
+                  <span>PDF Studio ({PDF_TOOLS.length} Tools)</span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
                   Merge, Split, Bates Stamp, Exhibit Stickers, Invoice Builder, AES-256 Encrypt &amp;
@@ -489,21 +492,21 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
               <div className="p-3.5 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
                   <ImageIcon className="w-4 h-4 text-indigo-500 shrink-0" />
-                  <span>Image Studio (55 Tools)</span>
+                  <span>Image Studio ({IMAGE_TOOLS.length} Tools)</span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  Batch Resize/Crop, 312 LUT Presets, Passport ID Sheets, Social Asset Kits &amp; RGB
-                  Histogram.
+                  Batch Resize/Crop, 312 LUT Presets, Binary/Base64/ASCII, LSB Stego &amp; QR/Barcode
+                  Studio.
                 </p>
               </div>
               <div className="p-3.5 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl">
                 <div className="flex items-center gap-2 text-xs font-bold text-slate-900 dark:text-white">
                   <Calculator className="w-4 h-4 text-emerald-500 shrink-0" />
-                  <span>Calculator &amp; Converter (38)</span>
+                  <span>Calculator &amp; Converter ({EXTRA_TOOLS.length})</span>
                 </div>
                 <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1">
-                  Loan EMI, ROI &amp; Margin, Ohm&apos;s Law, Statistics, Live FX Rates, 2D Graphing &amp;
-                  Converters.
+                  Loan EMI, ROI &amp; Margin, Binary/Hex/Morse/Ciphers, Base64/Unicode &amp; 2D
+                  Graphing.
                 </p>
               </div>
               <div className="p-3.5 bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 rounded-xl">
@@ -523,7 +526,9 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
         </main>
 
         <footer className="max-w-6xl w-full mx-auto py-3 border-t border-slate-200 dark:border-slate-800/80 text-xs text-slate-500 dark:text-slate-400 flex flex-col sm:flex-row items-center justify-between gap-2 text-center sm:text-left">
-          <span>Forma Studio — 159 Total Tools (66 PDF · 55 Image · 38 Calculator &amp; Converter)</span>
+          <span>
+            Forma Studio — {TOTAL_STUDIO_TOOLS_COUNT} Total Tools ({PDF_TOOLS.length} PDF · {IMAGE_TOOLS.length} Image · {EXTRA_TOOLS.length} Calculator &amp; Converter)
+          </span>
           <span className="font-mono text-[11px]">
             100% Local Browser Processing · Files Never Leave Your Device · UID-Isolated Workspace
           </span>

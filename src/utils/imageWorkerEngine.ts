@@ -3,6 +3,14 @@ import QRCode from 'qrcode';
 import jsQR from 'jsqr';
 import { PDFDocument } from 'pdf-lib';
 import { ALL_312_FILTER_PRESETS } from '../data/toolsCatalog';
+import {
+  bytesToBinaryHexString,
+  formatImageDataUriOutput,
+  generateAsciiArtFromRgba,
+  encodeLsbStegoRgba,
+  decodeLsbStegoRgba,
+  buildCode128SvgString,
+} from './imageDataArtCodesEngine';
 
 export interface ImageExecutionResult {
   outputDataUrl: string;
@@ -862,6 +870,49 @@ export async function executeImageStudioTool(
       width: 512,
       height: 512,
       summary: `Generated 512×512 ISO/IEC 18004 QR Code for "${qrText.slice(0, 40)}".`,
+    };
+  }
+
+  // #60 QR Code & Barcode Generator / Scanner (Standalone Generate Mode)
+  if (toolId === 'img-60-qr-barcode-studio' && String(params.mode || 'generate') === 'generate') {
+    const codeType = String(params.codeType || 'qr');
+    const payload = String(params.payload || 'https://forma.studio');
+    const sizePx = Math.max(128, Math.min(512, Number(params.sizePx) || 320));
+    const fgColor = String(params.fgColor || '#0F172A');
+    const bgColor = String(params.bgColor || '#FFFFFF');
+    const ecc = (String(params.ecc || 'M') as 'L' | 'M' | 'Q' | 'H') || 'M';
+
+    if (codeType === 'code128') {
+      const svgRes = buildCode128SvgString(payload, sizePx, fgColor, bgColor);
+      const svgBytes = new TextEncoder().encode(svgRes.svg || '<svg xmlns="http://www.w3.org/2000/svg"/>');
+      const svgUrl = `data:image/svg+xml;base64,${btoa(unescape(encodeURIComponent(svgRes.svg || '')))}`;
+      if (onProgress) onProgress(100);
+      return {
+        outputDataUrl: svgUrl,
+        outputBytes: svgBytes,
+        mimeType: 'image/svg+xml',
+        fileName: `${baseName}_code128.svg`,
+        width: sizePx,
+        height: Math.round(sizePx * 0.45),
+        summary: `Generated Code128 barcode for "${payload.slice(0, 32)}".`,
+      };
+    }
+
+    const qrDataUrl = await QRCode.toDataURL(payload, {
+      width: sizePx,
+      margin: 2,
+      errorCorrectionLevel: ecc,
+      color: { dark: fgColor, light: bgColor },
+    });
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: qrDataUrl,
+      outputBytes: dataUrlToUint8Array(qrDataUrl),
+      mimeType: 'image/png',
+      fileName: `${baseName}_qr_${sizePx}px.png`,
+      width: sizePx,
+      height: sizePx,
+      summary: `Generated ${sizePx}×${sizePx} QR Code (ECC ${ecc}) for "${payload.slice(0, 40)}".`,
     };
   }
 
@@ -2399,6 +2450,135 @@ export async function executeImageStudioTool(
       width: c.width,
       height: c.height,
       summary: `Synthesized ${gridRepeat} (${tilingMode}) repeating pattern canvas (${c.width}×${c.height} px).`,
+    };
+  }
+
+  // #56 Image ↔ Binary (0/1) & Hex Converter
+  if (toolId === 'img-56-binary-hex') {
+    const rawBytes = dataUrlToUint8Array(sourceDataUrl);
+    const format = String(params.format || 'hex') === 'binary' ? 'binary' : 'hex';
+    const delimiter = String(params.delimiter || 'space') === 'none' ? 'none' : 'space';
+    const res = bytesToBinaryHexString(rawBytes, format, delimiter, 10000);
+    const textBytes = new TextEncoder().encode(res.codeText);
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: sourceDataUrl,
+      outputBytes: textBytes,
+      mimeType: 'text/plain',
+      fileName: `${baseName}_${format}.txt`,
+      width: srcW,
+      height: srcH,
+      summary: `Encoded ${res.totalBytes.toLocaleString()} image bytes to ${format.toUpperCase()} (${res.totalChars.toLocaleString()} chars).`,
+      extraMeta: { preview: res.previewText, totalBytes: res.totalBytes },
+    };
+  }
+
+  // #57 Image ↔ Base64 Data URI Converter
+  if (toolId === 'img-57-base64-datauri') {
+    const wrapper = (String(params.wrapper || 'data-uri') as any) || 'data-uri';
+    const res = formatImageDataUriOutput(sourceDataUrl, wrapper, sourceName);
+    const textBytes = new TextEncoder().encode(res.formatted);
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: sourceDataUrl,
+      outputBytes: textBytes,
+      mimeType: 'text/plain',
+      fileName: `${baseName}_${wrapper}.txt`,
+      width: srcW,
+      height: srcH,
+      summary: `Generated ${wrapper} Base64 snippet (${res.formatted.length.toLocaleString()} chars).`,
+    };
+  }
+
+  // #58 Image to ASCII / Matrix Art Generator
+  if (toolId === 'img-58-ascii-matrix-art') {
+    const style = (String(params.style || 'classic') as any) || 'classic';
+    const cols = Math.max(40, Math.min(200, Number(params.cols) || 90));
+    const invert = Boolean(params.invert ?? false);
+    const ascii = generateAsciiArtFromRgba(srcCtx.getImageData(0, 0, srcW, srcH).data, srcW, srcH, cols, style, invert);
+    const fontW = 8;
+    const fontH = 15;
+    const pad = 16;
+    const c = document.createElement('canvas');
+    c.width = ascii.colsCount * fontW + pad * 2;
+    c.height = ascii.rowsCount * fontH + pad * 2;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = style === 'matrix-binary' ? '#020604' : '#090D16';
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.font = 'bold 13px monospace';
+    ctx.textBaseline = 'top';
+    ctx.fillStyle = style === 'matrix-binary' ? '#10B981' : '#F8FAFC';
+    ascii.rows.forEach((row, rIdx) => {
+      ctx.fillText(row.map((cell) => cell.char).join(''), pad, pad + rIdx * fontH);
+    });
+    const url = c.toDataURL('image/png');
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: url,
+      outputBytes: dataUrlToUint8Array(url),
+      mimeType: 'image/png',
+      fileName: `${baseName}_${style}_ascii.png`,
+      width: c.width,
+      height: c.height,
+      summary: `Rendered ${ascii.colsCount}×${ascii.rowsCount} ${style} ASCII/Matrix art canvas.`,
+      extraMeta: { asciiText: ascii.text },
+    };
+  }
+
+  // #59 Secret Message in Image (LSB Steganography)
+  if (toolId === 'img-59-lsb-steganography') {
+    const mode = String(params.mode || 'hide');
+    const passphrase = String(params.passphrase || '');
+    const rgba = srcCtx.getImageData(0, 0, srcW, srcH).data;
+    if (mode === 'reveal') {
+      const dec = decodeLsbStegoRgba(rgba, passphrase);
+      const msgText = dec.valid ? dec.message : dec.error || 'No message found';
+      const bytes = new TextEncoder().encode(msgText);
+      if (onProgress) onProgress(100);
+      return {
+        outputDataUrl: sourceDataUrl,
+        outputBytes: bytes,
+        mimeType: 'text/plain',
+        fileName: `${baseName}_revealed_message.txt`,
+        width: srcW,
+        height: srcH,
+        summary: dec.valid ? `Extracted ${dec.byteLength} bytes from Stego PNG.` : dec.error || 'No message found.',
+      };
+    }
+    const secretMessage = String(params.secretMessage || 'Forma Studio LSB Secret Payload');
+    const enc = encodeLsbStegoRgba(rgba, srcW, srcH, secretMessage, passphrase);
+    const c = document.createElement('canvas');
+    c.width = srcW;
+    c.height = srcH;
+    const ctx = c.getContext('2d')!;
+    ctx.putImageData(new ImageData(new Uint8ClampedArray(enc.stegoRgba), srcW, srcH), 0, 0);
+    const url = c.toDataURL('image/png');
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: url,
+      outputBytes: dataUrlToUint8Array(url),
+      mimeType: 'image/png',
+      fileName: `${baseName}_stego_lsb.png`,
+      width: srcW,
+      height: srcH,
+      summary: `Embedded ${enc.payloadBytes} bytes into lossless RGB LSB Stego PNG.`,
+    };
+  }
+
+  // #60 QR Code & Barcode Scanner (Scan Mode)
+  if (toolId === 'img-60-qr-barcode-studio') {
+    const rgba = srcCtx.getImageData(0, 0, srcW, srcH).data;
+    const hit = jsQR(rgba, srcW, srcH, { inversionAttempts: 'attemptBoth' });
+    const decodedText = hit?.data || 'No QR Code detected in image.';
+    if (onProgress) onProgress(100);
+    return {
+      outputDataUrl: sourceDataUrl,
+      outputBytes: new TextEncoder().encode(decodedText),
+      mimeType: 'text/plain',
+      fileName: `${baseName}_scanned_payload.txt`,
+      width: srcW,
+      height: srcH,
+      summary: hit?.data ? `Decoded QR Code: "${hit.data.slice(0, 60)}"` : 'No QR code found in image.',
     };
   }
 
