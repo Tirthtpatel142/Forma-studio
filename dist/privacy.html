@@ -1,0 +1,336 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Privacy Policy — Forma Studio</title>
+    <meta
+      name="description"
+      content="Forma Studio Privacy Policy — All 169 PDF, Image, and Calculator &amp; Converter tools run 100% locally in your browser. Firebase Authentication and Firestore are used strictly for UID-isolated workspace synchronization."
+    />
+    <link rel="icon" type="image/png" href="./assets/aistudio/1794833140188_119f9ad8.png" />
+    <link rel="apple-touch-icon" href="./assets/aistudio/1794833140188_119f9ad8.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --surface-muted: #f1f5f9;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --text-muted: #475569;
+        --text-subtle: #64748b;
+        --accent: #2563eb;
+        --accent-soft: rgba(37, 99, 235, 0.08);
+        --emerald: #059669;
+      }
+      html.dark {
+        --bg: #090d16;
+        --surface: #0f172a;
+        --surface-muted: #1e293b;
+        --border: #1e293b;
+        --text: #f8fafc;
+        --text-muted: #cbd5e1;
+        --text-subtle: #94a3b8;
+        --accent: #3b82f6;
+        --accent-soft: rgba(59, 130, 246, 0.12);
+        --emerald: #10b981;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+      .container {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 24px 20px 64px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 32px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: var(--text);
+      }
+      .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        object-fit: cover;
+        border: 1px solid var(--border);
+      }
+      .brand-title {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-weight: 800;
+        font-size: 1.125rem;
+        letter-spacing: -0.02em;
+      }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+      }
+      .btn:hover {
+        border-color: var(--accent);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #ffffff;
+        border-color: var(--accent);
+      }
+      .kicker {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: var(--accent);
+        letter-spacing: 0.04em;
+        margin-bottom: 8px;
+      }
+      h1 {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: clamp(1.75rem, 3.2vw, 2.35rem);
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        margin: 0 0 10px;
+      }
+      .meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.78rem;
+        color: var(--text-subtle);
+        margin-bottom: 28px;
+      }
+      .highlight-box {
+        background: var(--accent-soft);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        padding: 18px 20px;
+        margin-bottom: 28px;
+      }
+      .highlight-box strong {
+        color: var(--emerald);
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.82rem;
+      }
+      section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      h2 {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin: 0 0 12px;
+        color: var(--text);
+      }
+      p {
+        margin: 0 0 12px;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+      p:last-child {
+        margin-bottom: 0;
+      }
+      ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      code {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.84rem;
+        background: var(--surface-muted);
+        padding: 2px 6px;
+        border-radius: 6px;
+      }
+      a.inline-link {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      a.inline-link:hover {
+        text-decoration: underline;
+      }
+      footer {
+        margin-top: 36px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.82rem;
+        color: var(--text-subtle);
+      }
+      .footer-links {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <a href="./" class="brand">
+          <img
+            src="./assets/aistudio/1794833140188_119f9ad8.png"
+            alt="Forma Studio Logo"
+            referrerpolicy="no-referrer"
+          />
+          <span class="brand-title">Forma Studio</span>
+        </a>
+        <div class="header-actions">
+          <button type="button" class="btn" id="theme-toggle" aria-label="Toggle color theme">
+            Daylight / Dark
+          </button>
+          <a href="./" class="btn btn-primary">← Back to Forma Studio</a>
+        </div>
+      </header>
+
+      <main>
+        <div class="kicker">FORMA STUDIO · PRIVACY &amp; DATA PROTECTION POLICY</div>
+        <h1>Privacy Policy</h1>
+        <div class="meta">Effective Date: November 16, 2026 · Version 2.4 · 169 Local Tools</div>
+
+        <div class="highlight-box">
+          <strong>100% LOCAL BROWSER PROCESSING GUARANTEE</strong>
+          <p style="margin-top: 6px;">
+            All PDF Studio (66 tools), Image Studio (60 tools &amp; 310+ filters), and Calculator
+            &amp; Converter Studio (43 tools) operations execute directly inside your browser using
+            WebAssembly, Web Workers, and HTML5 Canvas. Your private documents, images, and
+            calculations never leave your device unless you explicitly invoke an optional AI
+            assistant tool.
+          </p>
+        </div>
+
+        <section>
+          <h2>1. Zero Server Upload for Document, Image &amp; Calculator Tools</h2>
+          <p>
+            Forma Studio is engineered as a client-side workstation. When you merge, split, encrypt,
+            redact, bates-stamp, or convert PDFs, or when you resize, crop, apply LUT filters, hide
+            LSB steganography messages, or scan QR/barcodes in Image Studio, all binary byte streams
+            are processed exclusively in volatile browser memory (RAM) on your own device.
+          </p>
+          <ul>
+            <li>We do not upload, store, inspect, or log the contents of your PDF or image files on external storage servers.</li>
+            <li>All encoding, cipher, financial, engineering, and scientific calculations in Calculator &amp; Converter Studio run 100% offline in your browser.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>2. Firebase Authentication &amp; UID-Isolated Workspace Sync</h2>
+          <p>
+            Forma Studio uses <strong>Google Firebase Authentication</strong> (Email &amp; Password
+            and Google Sign-In) and <strong>Cloud Firestore</strong> strictly to provide
+            authenticated access and per-user workspace isolation:
+          </p>
+          <ul>
+            <li><strong>Account Identity:</strong> When you sign in, Firebase Authentication processes your email address, display name, and unique user identifier (<code>user.uid</code>).</li>
+            <li><strong>UID-Isolated Preferences &amp; Workspace State:</strong> Your pinned tools, theme preference, custom multi-step pipeline definitions, and calculation history are keyed strictly to your authenticated <code>user.uid</code> so no other account on the same browser or device can access your workspace.</li>
+            <li><strong>Sign-Out Memory Wipe:</strong> Signing out immediately unmounts your active files and clears in-memory session buffers.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>3. Browser Permissions &amp; Local Capabilities</h2>
+          <p>
+            Forma Studio respects your device privacy and requests zero intrusive hardware
+            permissions:
+          </p>
+          <ul>
+            <li><strong>No Camera, Microphone, or Geolocation:</strong> Forma Studio never requests access to your camera, microphone, or GPS location.</li>
+            <li><strong>Optional Completion Notifications:</strong> Browser desktop/mobile notifications (Web Notification API) are requested only if you explicitly click the <em>Enable Completion Alerts</em> toggle to be notified when background PDF/Image jobs complete.</li>
+            <li><strong>Clipboard API:</strong> Used only when you click <em>Copy</em> or <em>Paste</em> buttons inside a tool.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>4. Data Retention, Security &amp; Account Deletion</h2>
+          <p>
+            You retain full ownership and control over your data at all times. You can clear your
+            saved workspace history at any time directly from the profile menu inside Forma Studio
+            (<strong>Clear Workspace History</strong>), or request complete deletion of your
+            Firebase account record by contacting us.
+          </p>
+        </section>
+
+        <section>
+          <h2>5. Contact Information</h2>
+          <p>
+            If you have any questions about this Privacy Policy, OAuth verification, or your data
+            rights, please contact the Forma Studio administrator at:
+            <br />
+            <strong>Email:</strong>
+            <a class="inline-link" href="mailto:tirthtpatel142@gmail.com">tirthtpatel142@gmail.com</a>
+          </p>
+        </section>
+      </main>
+
+      <footer>
+        <span>&copy; 2026 Forma Studio. All rights reserved.</span>
+        <div class="footer-links">
+          <a class="inline-link" href="./">Launch Forma Studio</a>
+          <span>·</span>
+          <a class="inline-link" href="./terms.html">Terms of Service</a>
+          <span>·</span>
+          <a class="inline-link" href="mailto:tirthtpatel142@gmail.com">tirthtpatel142@gmail.com</a>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        var btn = document.getElementById('theme-toggle');
+        if (btn) {
+          btn.addEventListener('click', function () {
+            document.documentElement.classList.toggle('dark');
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

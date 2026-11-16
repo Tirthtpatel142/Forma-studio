@@ -1,0 +1,302 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Terms of Service — Forma Studio</title>
+    <meta
+      name="description"
+      content="Terms of Service for Forma Studio — Unified PDF Studio (66 Tools), Image Studio (60 Tools), and Calculator and Converter Studio (43 Tools)."
+    />
+    <link rel="icon" type="image/png" href="./assets/aistudio/1794833140188_119f9ad8.png" />
+    <link rel="apple-touch-icon" href="./assets/aistudio/1794833140188_119f9ad8.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&family=Plus+Jakarta+Sans:wght@600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      :root {
+        --bg: #f8fafc;
+        --surface: #ffffff;
+        --surface-muted: #f1f5f9;
+        --border: #e2e8f0;
+        --text: #0f172a;
+        --text-muted: #475569;
+        --text-subtle: #64748b;
+        --accent: #2563eb;
+      }
+      html.dark {
+        --bg: #090d16;
+        --surface: #0f172a;
+        --surface-muted: #1e293b;
+        --border: #1e293b;
+        --text: #f8fafc;
+        --text-muted: #cbd5e1;
+        --text-subtle: #94a3b8;
+        --accent: #3b82f6;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        font-family: 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+        background-color: var(--bg);
+        color: var(--text);
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+      .container {
+        max-width: 880px;
+        margin: 0 auto;
+        padding: 24px 20px 64px;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 16px;
+        padding-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 32px;
+        flex-wrap: wrap;
+      }
+      .brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 12px;
+        text-decoration: none;
+        color: var(--text);
+      }
+      .brand img {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        object-fit: cover;
+        border: 1px solid var(--border);
+      }
+      .brand-title {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-weight: 800;
+        font-size: 1.125rem;
+        letter-spacing: -0.02em;
+      }
+      .header-actions {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+      }
+      .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 8px 14px;
+        border-radius: 10px;
+        font-size: 0.8125rem;
+        font-weight: 600;
+        text-decoration: none;
+        cursor: pointer;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        transition: border-color 0.15s ease, background-color 0.15s ease;
+      }
+      .btn:hover {
+        border-color: var(--accent);
+      }
+      .btn-primary {
+        background: var(--accent);
+        color: #ffffff;
+        border-color: var(--accent);
+      }
+      .kicker {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.75rem;
+        color: var(--accent);
+        letter-spacing: 0.04em;
+        margin-bottom: 8px;
+      }
+      h1 {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: clamp(1.75rem, 3.2vw, 2.35rem);
+        font-weight: 800;
+        letter-spacing: -0.025em;
+        margin: 0 0 10px;
+      }
+      .meta {
+        font-family: 'JetBrains Mono', monospace;
+        font-size: 0.78rem;
+        color: var(--text-subtle);
+        margin-bottom: 28px;
+      }
+      section {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 16px;
+        padding: 24px;
+        margin-bottom: 20px;
+      }
+      h2 {
+        font-family: 'Plus Jakarta Sans', sans-serif;
+        font-size: 1.15rem;
+        font-weight: 700;
+        margin: 0 0 12px;
+        color: var(--text);
+      }
+      p {
+        margin: 0 0 12px;
+        color: var(--text-muted);
+        font-size: 0.95rem;
+      }
+      p:last-child {
+        margin-bottom: 0;
+      }
+      ul {
+        margin: 8px 0 0;
+        padding-left: 20px;
+        color: var(--text-muted);
+        font-size: 0.94rem;
+      }
+      li {
+        margin-bottom: 8px;
+      }
+      a.inline-link {
+        color: var(--accent);
+        text-decoration: none;
+        font-weight: 600;
+      }
+      a.inline-link:hover {
+        text-decoration: underline;
+      }
+      footer {
+        margin-top: 36px;
+        padding-top: 20px;
+        border-top: 1px solid var(--border);
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        font-size: 0.82rem;
+        color: var(--text-subtle);
+      }
+      .footer-links {
+        display: flex;
+        align-items: center;
+        gap: 16px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <header>
+        <a href="./" class="brand">
+          <img
+            src="./assets/aistudio/1794833140188_119f9ad8.png"
+            alt="Forma Studio Logo"
+            referrerpolicy="no-referrer"
+          />
+          <span class="brand-title">Forma Studio</span>
+        </a>
+        <div class="header-actions">
+          <button type="button" class="btn" id="theme-toggle" aria-label="Toggle color theme">
+            Daylight / Dark
+          </button>
+          <a href="./" class="btn btn-primary">← Back to Forma Studio</a>
+        </div>
+      </header>
+
+      <main>
+        <div class="kicker">FORMA STUDIO · USER AGREEMENT &amp; TERMS OF SERVICE</div>
+        <h1>Terms of Service</h1>
+        <div class="meta">Effective Date: November 16, 2026 · Version 2.4 · Forma Studio Workstation</div>
+
+        <section>
+          <h2>1. Acceptance of Terms</h2>
+          <p>
+            By accessing or using <strong>Forma Studio</strong>, including its PDF Studio (66
+            Tools), Image Studio (60 Tools &amp; 310+ Filters), Calculator and Converter Studio (43
+            Tools), and Automated Pipelines, you agree to be bound by these Terms of Service and our
+            <a class="inline-link" href="./privacy.html">Privacy Policy</a>.
+          </p>
+        </section>
+
+        <section>
+          <h2>2. Client-Side Processing &amp; User Responsibility</h2>
+          <p>
+            Forma Studio processes documents, images, and calculations locally in your web browser.
+            You retain 100% ownership and legal responsibility for all files, documents, images,
+            passwords, and content you process using Forma Studio:
+          </p>
+          <ul>
+            <li>You confirm that you have the lawful right to edit, unlock, redact, encrypt, or convert any document or image you load into the workstation.</li>
+            <li>Because encryption and password-protection tools (such as AES-256 PDF Encryption and LSB Steganography) run locally in your browser without server key escrow, you are solely responsible for remembering your passwords and passphrases.</li>
+          </ul>
+        </section>
+
+        <section>
+          <h2>3. Account Authentication &amp; Workspace Security</h2>
+          <p>
+            Forma Studio provides authenticated workspace isolation via Firebase Authentication
+            (Email &amp; Password and Google Sign-In). You are responsible for maintaining the
+            confidentiality of your login credentials and for signing out when using shared or
+            public computers.
+          </p>
+        </section>
+
+        <section>
+          <h2>4. Acceptable Use</h2>
+          <p>
+            You agree not to misuse Forma Studio to process unlawful material, attempt unauthorized
+            access to another user's Firebase UID namespace, or interfere with the availability or
+            integrity of the application.
+          </p>
+        </section>
+
+        <section>
+          <h2>5. Disclaimer of Warranties &amp; Limitation of Liability</h2>
+          <p>
+            Forma Studio and all 169 tools are provided on an "AS IS" and "AS AVAILABLE" basis
+            without warranties of any kind, whether express or implied. Always verify critical
+            financial, engineering, legal, or health calculations and keep backup copies of
+            original documents prior to destructive redaction or encryption.
+          </p>
+        </section>
+
+        <section>
+          <h2>6. Contact</h2>
+          <p>
+            For questions regarding these Terms of Service, please contact:
+            <br />
+            <strong>Email:</strong>
+            <a class="inline-link" href="mailto:tirthtpatel142@gmail.com">tirthtpatel142@gmail.com</a>
+          </p>
+        </section>
+      </main>
+
+      <footer>
+        <span>&copy; 2026 Forma Studio. All rights reserved.</span>
+        <div class="footer-links">
+          <a class="inline-link" href="./">Launch Forma Studio</a>
+          <span>·</span>
+          <a class="inline-link" href="./privacy.html">Privacy Policy</a>
+          <span>·</span>
+          <a class="inline-link" href="mailto:tirthtpatel142@gmail.com">tirthtpatel142@gmail.com</a>
+        </div>
+      </footer>
+    </div>
+
+    <script>
+      (function () {
+        var btn = document.getElementById('theme-toggle');
+        if (btn) {
+          btn.addEventListener('click', function () {
+            document.documentElement.classList.toggle('dark');
+          });
+        }
+      })();
+    </script>
+  </body>
+</html>

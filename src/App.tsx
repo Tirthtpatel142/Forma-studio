@@ -2147,9 +2147,12 @@ function FormaStudioWorkspace() {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-50 dark:bg-[#0B0F19] text-slate-900 dark:text-slate-100">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-8 h-8 rounded-lg bg-blue-600 flex items-center justify-center text-white font-extrabold font-mono animate-pulse">
-            FS
-          </div>
+          <img
+            src="./assets/aistudio/1794833140188_119f9ad8.png"
+            alt="Forma Studio Logo"
+            referrerPolicy="no-referrer"
+            className="w-11 h-11 rounded-xl object-cover shadow-md border border-slate-200 dark:border-slate-800"
+          />
           <div className="text-xs font-mono text-slate-500 dark:text-slate-400">
             Initializing Forma Studio Security Gate...
           </div>
@@ -2213,9 +2216,15 @@ function FormaStudioWorkspace() {
                 e.preventDefault();
                 handleStudioSwitch('pdf');
               }}
-              className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 font-display"
+              className="flex items-center gap-2 text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 font-display"
             >
-              Forma Studio
+              <img
+                src="./assets/aistudio/1794833140188_119f9ad8.png"
+                alt="Forma Studio Logo"
+                referrerPolicy="no-referrer"
+                className="w-7 h-7 rounded-lg object-cover shrink-0 border border-slate-200 dark:border-slate-800"
+              />
+              <span>Forma Studio</span>
             </a>
           </div>
 
@@ -4403,7 +4412,7 @@ function FormaStudioWorkspace() {
         <div>
           Forma Studio — {TOTAL_TOOLS_COUNT} Tools ({PDF_TOOLS.length} PDF · {IMAGE_TOOLS.length} Image · {EXTRA_TOOLS.length} Calculator &amp; Converter) · 100% Local Browser Processing
         </div>
-        <div className="flex items-center gap-4 font-mono tabular-nums">
+        <div className="flex flex-wrap items-center justify-center gap-3 font-mono tabular-nums">
           <button
             type="button"
             onClick={() => setIsShortcutsOpen(true)}
@@ -4416,6 +4425,20 @@ function FormaStudioWorkspace() {
           <span>{importedHistory.length} Imported</span>
           <span aria-hidden="true">·</span>
           <span>{completedOutputs.length} Completed</span>
+          <span aria-hidden="true">·</span>
+          <a
+            href="./privacy.html"
+            className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
+          >
+            Privacy
+          </a>
+          <span aria-hidden="true">·</span>
+          <a
+            href="./terms.html"
+            className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors"
+          >
+            Terms
+          </a>
         </div>
       </footer>
 

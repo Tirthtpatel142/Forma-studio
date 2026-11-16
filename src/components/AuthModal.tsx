@@ -131,21 +131,29 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
   const cardContent = (
     <div className="w-full max-w-md bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-2xl overflow-hidden">
       {/* Card Header */}
-      <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between">
-        <div>
-          <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400">
-            FORMA STUDIO WORKSTATION
+      <div className="px-5 sm:px-6 pt-5 sm:pt-6 pb-4 border-b border-slate-200 dark:border-slate-800 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-3 min-w-0">
+          <img
+            src="./assets/aistudio/1794833140188_119f9ad8.png"
+            alt="Forma Studio Logo"
+            referrerPolicy="no-referrer"
+            className="w-10 h-10 rounded-xl object-cover shrink-0 border border-slate-200 dark:border-slate-800 shadow-xs"
+          />
+          <div className="min-w-0">
+            <div className="text-[11px] font-mono text-blue-600 dark:text-blue-400">
+              FORMA STUDIO WORKSTATION
+            </div>
+            <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mt-0.5 truncate">
+              {activeTab === 'signin'
+                ? 'Sign in to your workspace'
+                : activeTab === 'signup'
+                ? 'Create your studio account'
+                : 'Reset your password'}
+            </h1>
+            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+              Isolated per-user storage for all {TOTAL_STUDIO_TOOLS_COUNT} PDF, Image &amp; Calculator tools
+            </p>
           </div>
-          <h1 className="text-lg sm:text-xl font-bold text-slate-900 dark:text-white mt-0.5">
-            {activeTab === 'signin'
-              ? 'Sign in to your workspace'
-              : activeTab === 'signup'
-              ? 'Create your studio account'
-              : 'Reset your password'}
-          </h1>
-          <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-            Isolated per-user storage for all {TOTAL_STUDIO_TOOLS_COUNT} PDF, Image &amp; Calculator tools
-          </p>
         </div>
         {mode === 'modal' && onClose && (
           <button
@@ -408,13 +416,37 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
         )}
       </div>
 
-      {/* Footer Security & Per-User Scope Note (Clean Status Label — No Raw Firebase Project ID) */}
-      <div className="px-5 sm:px-6 py-3.5 bg-slate-50 dark:bg-slate-950/70 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 flex items-center justify-between gap-2">
-        <span className="truncate">Strict per-user isolated workspace</span>
-        <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 whitespace-nowrap shrink-0">
-          <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
-          <span>UID-Isolated Workspace</span>
-        </span>
+      {/* Footer Security & Per-User Scope Note + Public Privacy & Terms Links */}
+      <div className="px-5 sm:px-6 py-3.5 bg-slate-50 dark:bg-slate-950/70 border-t border-slate-200 dark:border-slate-800 text-[11px] text-slate-500 dark:text-slate-400 space-y-2">
+        <div className="flex items-center justify-between gap-2">
+          <span className="truncate">Strict per-user isolated workspace</span>
+          <span className="font-mono text-[10px] text-emerald-600 dark:text-emerald-400 flex items-center gap-1 whitespace-nowrap shrink-0">
+            <ShieldCheck className="w-3.5 h-3.5 shrink-0" />
+            <span>UID-Isolated Workspace</span>
+          </span>
+        </div>
+        <div className="flex items-center justify-between gap-2 pt-1.5 border-t border-slate-200/70 dark:border-slate-800/70 text-[11px]">
+          <span className="text-slate-400 dark:text-slate-500 truncate">
+            100% Local Browser Processing
+          </span>
+          <div className="flex items-center gap-2.5 shrink-0">
+            <a
+              href="./privacy.html"
+              className="text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors whitespace-nowrap"
+            >
+              Privacy Policy
+            </a>
+            <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">
+              ·
+            </span>
+            <a
+              href="./terms.html"
+              className="text-slate-500 dark:text-slate-400 hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors whitespace-nowrap"
+            >
+              Terms of Service
+            </a>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -437,7 +469,13 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
       <div className="min-h-screen bg-slate-100 dark:bg-[#090D16] text-slate-900 dark:text-slate-100 flex flex-col justify-between p-3.5 sm:p-6">
         {/* Compact Top Bar on Login Gate (Fits cleanly at 360px+) */}
         <header className="max-w-6xl w-full mx-auto flex items-center justify-between gap-2 py-1.5 sm:py-2">
-          <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <img
+              src="./assets/aistudio/1794833140188_119f9ad8.png"
+              alt="Forma Studio Logo"
+              referrerPolicy="no-referrer"
+              className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg object-cover shrink-0 border border-slate-200 dark:border-slate-800"
+            />
             <span className="text-base sm:text-lg font-extrabold tracking-tight text-slate-900 dark:text-white whitespace-nowrap shrink-0 font-display">
               Forma Studio
             </span>
@@ -529,9 +567,23 @@ export const AuthModal: React.FC<AuthGateOrModalProps> = ({
           <span>
             Forma Studio — {TOTAL_STUDIO_TOOLS_COUNT} Total Tools ({PDF_TOOLS.length} PDF · {IMAGE_TOOLS.length} Image · {EXTRA_TOOLS.length} Calculator &amp; Converter)
           </span>
-          <span className="font-mono text-[11px]">
-            100% Local Browser Processing · Files Never Leave Your Device · UID-Isolated Workspace
-          </span>
+          <div className="flex flex-wrap items-center justify-center gap-2.5 font-mono text-[11px]">
+            <span>100% Local Browser Processing · UID-Isolated Workspace</span>
+            <span aria-hidden="true">·</span>
+            <a
+              href="./privacy.html"
+              className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors whitespace-nowrap"
+            >
+              Privacy Policy
+            </a>
+            <span aria-hidden="true">·</span>
+            <a
+              href="./terms.html"
+              className="hover:text-blue-600 dark:hover:text-blue-400 hover:underline transition-colors whitespace-nowrap"
+            >
+              Terms of Service
+            </a>
+          </div>
         </footer>
       </div>
     </div>
