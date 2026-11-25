@@ -14,7 +14,11 @@
   <img src="https://img.shields.io/badge/AI_Powered-Gemini_2.5-F59E0B?style=for-the-badge&logo=googlegemini&logoColor=white" alt="Gemini 2.5 AI" />
   <img src="https://img.shields.io/badge/Theme-Dark_%26_Daylight-0F172A?style=for-the-badge" alt="Dark & Daylight Theme" />
 </p>
-
+<p>
+  <a href="https://tirthtpatel142.github.io/Forma-studio/" target="_blank">
+    <img src="https://img.shields.io/badge/🚀_Launch_Forma_Studio-Live_Web_App-2563EB?style=for-the-badge" alt="Launch Forma Studio Live" />
+  </a>
+</p>
 <p>
   <a href="#-why-forma-studio">Highlights</a> •
   <a href="#-how-it-works-architecture-flow">Architecture</a> •
